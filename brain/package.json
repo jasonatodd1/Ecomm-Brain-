@@ -5,7 +5,8 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "start": "tsx src/jobs/collect-google-trends.ts",
+    "start": "tsx src/jobs/collect-reddit.ts",
+    "collect:reddit": "tsx src/jobs/collect-reddit.ts",
     "collect:trends": "tsx src/jobs/collect-google-trends.ts",
     "typecheck": "tsc --noEmit"
   },
