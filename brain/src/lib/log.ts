@@ -35,6 +35,11 @@ export async function log(entry: LogEntry): Promise<void> {
   });
 
   if (error) {
-    console.error('failed to write activity row:', error.message);
+    console.error(
+      '[ACTIVITY_LOG_FAILED]',
+      error.message,
+      '-- entry:',
+      JSON.stringify({ ...entry, severity: sev })
+    );
   }
 }

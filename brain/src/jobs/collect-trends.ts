@@ -150,17 +150,27 @@ async function main(): Promise<void> {
 
   const durationSec = Math.round((Date.now() - startedAt) / 1000);
 
-  await log({
-    agent: 'intel',
-    action: 'trends.complete',
-    description: `Google Trends scan done: ${success} succeeded, ${skipped} skipped in ${durationSec}s`,
-    severity: skipped > success ? 'warning' : 'success',
-    metadata: { success, skipped, duration_sec: durationSec }
-  });
+  console.log(`[summary] succeeded=${success} skipped=${skipped} duration=${durationSec}s`);
+
+  try {
+    await log({
+      agent: 'intel',
+      action: 'trends.complete',
+      description: `Google Trends scan done: ${success} succeeded, ${skipped} skipped in ${durationSec}s`,
+      severity: skipped > success ? 'warning' : 'success',
+      metadata: { success, skipped, duration_sec: durationSec }
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[trends.complete failed to write to activity table]: ${msg}`);
+  }
 }
 
 main()
-  .then(() => process.exit(0))
+  .then(async () => {
+    await new Promise(r => setTimeout(r, 500));
+    process.exit(0);
+  })
   .catch(err => {
     console.error('job crashed:', err);
     process.exit(1);
