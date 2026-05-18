@@ -8,6 +8,8 @@
     "start": "tsx src/jobs/collect-trends.ts",
     "collect:reddit": "tsx src/jobs/collect-reddit.ts",
     "collect:trends": "tsx src/jobs/collect-trends.ts",
+    "score": "tsx src/jobs/score-opportunities.ts",
+    "seed:planneraddicts": "tsx src/jobs/seed-planneraddicts-decision.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

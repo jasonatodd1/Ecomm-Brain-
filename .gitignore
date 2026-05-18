@@ -1,0 +1,11 @@
+# Environment files — never commit real credentials
+.env
+.env.local
+.env.*.local
+
+# Node
+brain/node_modules/
+brain/dist/
+
+# macOS
+.DS_Store
