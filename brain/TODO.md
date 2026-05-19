@@ -6,13 +6,14 @@
 - [ ] Validation/research agent for planneraddicts opportunity → product brief
 
 ## Backlog (committed, deferred)
-- [ ] Reddit precision fix: filter false positives, weight by buyer vs seller subreddit, optionally add Claude intent classifier
 - [ ] Drop dead keywords from seed list (digital planner, printable wall art, custom invitation template); investigate or remove gratitude journal printable (SerpApi failure case)
 - [ ] `expense.ts` utility for programmatic cost logging (no more raw SQL inserts)
 - [ ] Per-provider cost caps with daily limits (runaway-spend guardrail)
 - [ ] Model router abstraction (Opus / Sonnet / Haiku / Gemini swap without code changes)
 - [ ] Cron scheduling on Railway (after scoring engine validated)
-- [ ] Anthropic API key in Railway env (needed before any LLM-using agent runs)
+- [ ] Scoring formula ceiling: multiple Google Trends keywords hitting confidence 1.000 — lost discrimination at top, needs refactor (higher ceiling, log scale, or different math)
+- [ ] Google Trends velocity volatility: keywords can swing from +8% to +494% in one cycle. Need historical tracking and a stability score before trusting single-run velocity
+- [ ] LLM cost tracking integration with cost_log table (currently logging cost.api_call activity events but not aggregating)
 
 ## Future (after first sale validation)
 - [ ] Product creation agent (design generation via Recraft/Ideogram/Flux, PDF assembly)
@@ -40,3 +41,9 @@
 ### Scoring
 - [x] Scoring engine MVP (Google Trends + Reddit passes, capped velocity, upserts to opportunities)
 - [x] planneraddicts decision row seeded
+
+### Reddit Precision
+- [x] Subreddit categorization (buyer / seller / mixed) added to collect-reddit.ts
+- [x] Claude Haiku 4.5 intent classifier (src/lib/classify-intent.ts) for mixed/buyer subreddits
+- [x] Reclassification script (src/jobs/reclassify-reddit-signals.ts) for backfilling existing signals
+- [x] ANTHROPIC_API_KEY configured in .env.local and Railway
