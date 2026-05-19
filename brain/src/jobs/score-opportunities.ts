@@ -1,4 +1,5 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
+dotenv.config({ path: '.env.local' });
 import { supabase } from '../lib/supabase.js';
 import { log } from '../lib/log.js';
 
