@@ -38,7 +38,7 @@ export function renderBriefAsMarkdown(
   lines.push(
     `- **Price range:** $${m.price_range.p25.toFixed(2)} (p25) — $${m.price_range.p50.toFixed(2)} (median) — $${m.price_range.p75.toFixed(2)} (p75)`
   );
-  lines.push(`- **Median reviews:** ${m.median_review_count}`);
+  lines.push(`- **Median favorers:** ${m.median_favorers}`);
   lines.push('');
 
   if (m.top_sellers.length > 0) {
@@ -46,7 +46,7 @@ export function renderBriefAsMarkdown(
     lines.push('');
     m.top_sellers.forEach((s, i) => {
       lines.push(
-        `${i + 1}. **[${s.listing_title}](${s.listing_url})** — ${s.shop_name} — $${s.price.toFixed(2)} — ${s.review_count} reviews`
+        `${i + 1}. **[${s.listing_title}](${s.listing_url})** — ${s.shop_name} — $${s.price.toFixed(2)} — ${s.num_favorers} favorers`
       );
       if (s.notable_features.length > 0) {
         lines.push(`   - Notable: ${s.notable_features.join(', ')}`);

@@ -48,14 +48,14 @@ export type ProductBrief = {
     listings_analyzed: number;
     median_price: number;
     price_range: { p25: number; p50: number; p75: number };
-    median_review_count: number;
+    median_favorers: number;
     top_sellers: Array<{
       shop_name: string;
       shop_url: string;
       listing_title: string;
       listing_url: string;
       price: number;
-      review_count: number;
+      num_favorers: number;
       notable_features: string[];
     }>;
     common_formats: string[];
@@ -80,14 +80,16 @@ export interface DecisionRecord {
 }
 
 export interface EtsySearchResult {
+  listing_id: number;
   title: string;
   price: number | null;
-  rating: number | null;
-  reviews: number | null;
+  currency: string;
   url: string;
   shop_name: string;
   shop_url: string;
-  thumbnail: string;
+  num_favorers: number | null;
+  image_url?: string;
+  description_preview: string;
 }
 
 export interface NicheMemoryRow {

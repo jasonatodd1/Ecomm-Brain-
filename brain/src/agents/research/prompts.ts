@@ -70,21 +70,21 @@ function formatNicheMemory(memory: NicheMemoryRow[]): string {
 
 function formatAggregates(aggregates: MarketAggregates): string {
   if (aggregates.listings_analyzed === 0) {
-    return '(No listings with complete price + review data — competitive aggregates unavailable. Note this in your reasoning and risks.)';
+    return '(No listings with complete price + favorers data — competitive aggregates unavailable. Note this in your reasoning and risks.)';
   }
 
   const lines: string[] = [
     `listings_analyzed: ${aggregates.listings_analyzed}`,
     `median_price: $${aggregates.median_price.toFixed(2)}`,
     `price_range: P25=$${aggregates.price_range.p25.toFixed(2)}, P50=$${aggregates.price_range.p50.toFixed(2)}, P75=$${aggregates.price_range.p75.toFixed(2)}`,
-    `median_review_count: ${aggregates.median_review_count}`,
+    `median_favorers: ${aggregates.median_favorers}`,
     '',
-    'top_sellers (sorted by review count, with notable_features left for you to fill):'
+    'top_sellers (sorted by num_favorers desc, with notable_features left for you to fill):'
   ];
 
   aggregates.top_sellers.forEach((s, i) => {
     lines.push(
-      `${i + 1}. ${s.shop_name} | ${s.listing_title} | $${s.price.toFixed(2)} | ${s.review_count} reviews | ${s.listing_url}`
+      `${i + 1}. ${s.shop_name} | ${s.listing_title} | $${s.price.toFixed(2)} | ${s.num_favorers} favorers | ${s.listing_url}`
     );
   });
 
@@ -99,11 +99,14 @@ function formatEtsyResults(results: EtsySearchResult[]): string {
   return results
     .map((r, i) => {
       const price = r.price !== null ? `$${r.price.toFixed(2)}` : 'unknown';
-      const rating = r.rating !== null ? `${r.rating}★` : 'no rating';
-      const reviews = r.reviews !== null ? `${r.reviews} reviews` : '0 reviews';
+      const favorers =
+        r.num_favorers !== null ? `${r.num_favorers} favorers` : '0 favorers';
+      const desc = r.description_preview
+        ? `\n    desc=${r.description_preview.slice(0, 200).replace(/\s+/g, ' ').trim()}`
+        : '';
       return `[${i + 1}] ${r.title}
-    shop=${r.shop_name} | ${price} | ${rating} | ${reviews}
-    listing=${r.url}`;
+    shop=${r.shop_name} | ${price} | ${favorers}
+    listing=${r.url}${desc}`;
     })
     .join('\n\n');
 }
@@ -206,7 +209,7 @@ Return EXACTLY this structure as raw JSON. No markdown fences. No prose. No prea
     "listings_analyzed": <integer matching the data above>,
     "median_price": <usd>,
     "price_range": { "p25": <usd>, "p50": <usd>, "p75": <usd> },
-    "median_review_count": <integer>,
+    "median_favorers": <integer>,
     "top_sellers": [
       {
         "shop_name": "...",
@@ -214,7 +217,7 @@ Return EXACTLY this structure as raw JSON. No markdown fences. No prose. No prea
         "listing_title": "...",
         "listing_url": "...",
         "price": <usd>,
-        "review_count": <integer>,
+        "num_favorers": <integer>,
         "notable_features": ["..."]
       }
     ],

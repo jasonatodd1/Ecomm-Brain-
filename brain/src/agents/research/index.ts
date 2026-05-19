@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { supabase } from '../../lib/supabase.js';
 import { log } from '../../lib/log.js';
-import { searchEtsy } from '../../lib/serpapi-etsy.js';
+import { searchEtsy } from '../../lib/etsy-search.js';
 
 import {
   buildKeywordExtractionPrompt,
@@ -22,7 +22,6 @@ import type {
 const OPUS_MODEL = 'claude-opus-4-7';
 const KEYWORD_COST_USD = 0.05;
 const SYNTHESIS_COST_USD = 0.2;
-const ETSY_COST_USD = 0.15;
 const AGENT_VERSION = 'research-v1';
 
 let anthropicClient: Anthropic | null = null;
@@ -176,24 +175,27 @@ export async function researchDecision(
       );
     }
 
-    // Step 6 — Search Etsy for each keyword in parallel, deduplicate by URL
+    // Step 6 — Search Etsy for each keyword in parallel, deduplicate by listing_id/url
     currentStep = 'search_etsy';
     const searchArrays = await Promise.all(
-      keywords.map(k => searchEtsy(k, { num: 10 }))
+      keywords.map(k => searchEtsy(k, { limit: 25 }))
     );
 
     const seen = new Set<string>();
     const searchResults: EtsySearchResult[] = [];
     for (const arr of searchArrays) {
       for (const r of arr) {
-        const key = r.url || `${r.shop_name}::${r.title}`;
+        const key =
+          r.listing_id > 0
+            ? `id:${r.listing_id}`
+            : r.url || `${r.shop_name}::${r.title}`;
         if (!seen.has(key) && key.length > 0) {
           seen.add(key);
           searchResults.push(r);
         }
       }
     }
-    totalCostUsd += keywords.length * ETSY_COST_USD;
+    // Etsy Open API is free — no cost accumulation needed here.
 
     // Step 6.5 — Compute market aggregates in code (LLMs are unreliable at stats)
     const aggregates = computeAggregates(searchResults);
@@ -476,10 +478,10 @@ async function reconcileNumericDrift(
       computed: aggregates.price_range
     };
   }
-  if (llm.median_review_count !== aggregates.median_review_count) {
-    drift['median_review_count'] = {
-      llm: llm.median_review_count,
-      computed: aggregates.median_review_count
+  if (llm.median_favorers !== aggregates.median_favorers) {
+    drift['median_favorers'] = {
+      llm: llm.median_favorers,
+      computed: aggregates.median_favorers
     };
   }
 
@@ -487,7 +489,7 @@ async function reconcileNumericDrift(
   brief.market_summary.listings_analyzed = aggregates.listings_analyzed;
   brief.market_summary.median_price = aggregates.median_price;
   brief.market_summary.price_range = aggregates.price_range;
-  brief.market_summary.median_review_count = aggregates.median_review_count;
+  brief.market_summary.median_favorers = aggregates.median_favorers;
 
   if (Object.keys(drift).length > 0) {
     await log({
