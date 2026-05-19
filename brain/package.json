@@ -11,6 +11,8 @@
     "score": "tsx src/jobs/score-opportunities.ts",
     "seed:planneraddicts": "tsx src/jobs/seed-planneraddicts-decision.ts",
     "reclassify:reddit": "tsx src/jobs/reclassify-reddit-signals.ts",
+    "research": "tsx src/jobs/research-decision.ts",
+    "research:planneraddicts": "tsx src/jobs/research-decision.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -1,0 +1,457 @@
+import Anthropic from '@anthropic-ai/sdk';
+import { mkdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+
+import { supabase } from '../../lib/supabase.js';
+import { log } from '../../lib/log.js';
+import { searchEtsy } from '../../lib/serpapi-etsy.js';
+
+import {
+  buildKeywordExtractionPrompt,
+  buildSynthesisPrompt
+} from './prompts.js';
+import { renderBriefAsMarkdown } from './render-markdown.js';
+import type {
+  DecisionRecord,
+  EtsySearchResult,
+  NicheMemoryRow,
+  ProductBrief
+} from './types.js';
+
+const OPUS_MODEL = 'claude-opus-4-7';
+const KEYWORD_COST_USD = 0.05;
+const SYNTHESIS_COST_USD = 0.2;
+const ETSY_COST_USD = 0.15;
+const AGENT_VERSION = 'research-v1';
+
+let anthropicClient: Anthropic | null = null;
+function getAnthropic(): Anthropic {
+  if (!anthropicClient) {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      throw new Error('Missing ANTHROPIC_API_KEY environment variable');
+    }
+    anthropicClient = new Anthropic({ apiKey });
+  }
+  return anthropicClient;
+}
+
+// Strip optional ```json fences Haiku/Opus sometimes wrap output in.
+function stripJsonFences(raw: string): string {
+  return raw
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim();
+}
+
+function getTextFromResponse(message: Anthropic.Message): string {
+  const block = message.content[0];
+  if (block && block.type === 'text') return block.text;
+  throw new Error('Anthropic response did not contain a text block');
+}
+
+interface ResearchResult {
+  briefId: string;
+  totalCostUsd: number;
+}
+
+export async function researchDecision(
+  decisionId: string
+): Promise<ResearchResult> {
+  let totalCostUsd = 0;
+  let claimed = false;
+  let currentStep = 'init';
+
+  // Step 1 — Create agent_runs row (outside try/catch; if this fails, abort)
+  const { data: runRow, error: runErr } = await supabase
+    .from('agent_runs')
+    .insert({
+      agent_name: 'research',
+      status: 'running',
+      input_ref: decisionId,
+      model_used: OPUS_MODEL,
+      cost_usd: 0
+    })
+    .select('id')
+    .single();
+
+  if (runErr || !runRow) {
+    throw new Error(
+      `Failed to create agent_runs row: ${runErr?.message ?? 'unknown'}`
+    );
+  }
+
+  const runId = runRow.id as string;
+
+  try {
+    // Step 2 — Claim decision atomically
+    currentStep = 'claim_decision';
+    const { data: claimedRows, error: claimErr } = await supabase
+      .from('decisions_needed')
+      .update({
+        status: 'researching',
+        claimed_by: 'research',
+        claimed_at: new Date().toISOString()
+      })
+      .eq('id', decisionId)
+      .eq('status', 'open')
+      .select('id, title, description, context, urgency, status');
+
+    if (claimErr) {
+      throw new Error(`Claim query failed: ${claimErr.message}`);
+    }
+
+    if (!claimedRows || claimedRows.length === 0) {
+      throw new Error(
+        "decision not in 'open' state — already claimed or wrong status"
+      );
+    }
+
+    claimed = true;
+    const decision = claimedRows[0] as DecisionRecord;
+
+    // Step 3 — Identify niche tags & pull memory
+    currentStep = 'load_niche_memory';
+    const ctx = decision.context;
+    const subreddit =
+      typeof ctx['subreddit'] === 'string' ? ctx['subreddit'] : '';
+    const source = typeof ctx['source'] === 'string' ? ctx['source'] : '';
+    const nicheTag =
+      source === 'reddit' && subreddit ? subreddit : 'general';
+
+    const { data: nicheData, error: nicheErr } = await supabase
+      .from('niche_memory')
+      .select(
+        'niche_tag, memory_key, memory_value, confidence, source, evidence_count, last_updated_at'
+      )
+      .eq('niche_tag', nicheTag);
+
+    if (nicheErr) {
+      throw new Error(`Failed to load niche_memory: ${nicheErr.message}`);
+    }
+
+    const nicheMemory = (nicheData ?? []) as NicheMemoryRow[];
+
+    // Step 4 — Read agent_config (V1: presence only)
+    currentStep = 'load_agent_config';
+    await supabase
+      .from('agent_config')
+      .select('config_key, config_value')
+      .eq('agent_name', 'research');
+
+    // Step 5 — Extract keywords via Opus
+    currentStep = 'extract_keywords';
+    const anthropic = getAnthropic();
+
+    const keywordPrompt = buildKeywordExtractionPrompt(decision);
+    const keywordResp = await anthropic.messages.create({
+      model: OPUS_MODEL,
+      max_tokens: 300,
+      messages: [{ role: 'user', content: keywordPrompt }]
+    });
+    totalCostUsd += KEYWORD_COST_USD;
+
+    await log({
+      agent: 'intel',
+      action: 'cost.api_call',
+      description: 'Opus keyword extraction',
+      metadata: {
+        provider: 'anthropic',
+        model: OPUS_MODEL,
+        step: 'keyword_extraction',
+        estimated_cost_usd: KEYWORD_COST_USD
+      }
+    });
+
+    const keywordText = stripJsonFences(getTextFromResponse(keywordResp));
+    const keywords = JSON.parse(keywordText) as unknown;
+    if (
+      !Array.isArray(keywords) ||
+      !keywords.every((k): k is string => typeof k === 'string')
+    ) {
+      throw new Error(
+        `Keyword extraction did not return string[]: ${keywordText.slice(0, 200)}`
+      );
+    }
+
+    // Step 6 — Search Etsy for each keyword in parallel, deduplicate by URL
+    currentStep = 'search_etsy';
+    const searchArrays = await Promise.all(
+      keywords.map(k => searchEtsy(k, { num: 10 }))
+    );
+
+    const seen = new Set<string>();
+    const searchResults: EtsySearchResult[] = [];
+    for (const arr of searchArrays) {
+      for (const r of arr) {
+        const key = r.url || `${r.shop_name}::${r.title}`;
+        if (!seen.has(key) && key.length > 0) {
+          seen.add(key);
+          searchResults.push(r);
+        }
+      }
+    }
+    totalCostUsd += keywords.length * ETSY_COST_USD;
+
+    // Step 7 — Synthesize brief via Opus
+    currentStep = 'synthesize_brief';
+    const synthesisPrompt = buildSynthesisPrompt(
+      decision,
+      nicheMemory,
+      searchResults
+    );
+    const synthesisResp = await anthropic.messages.create({
+      model: OPUS_MODEL,
+      max_tokens: 4000,
+      messages: [{ role: 'user', content: synthesisPrompt }]
+    });
+    totalCostUsd += SYNTHESIS_COST_USD;
+
+    await log({
+      agent: 'intel',
+      action: 'cost.api_call',
+      description: 'Opus brief synthesis',
+      metadata: {
+        provider: 'anthropic',
+        model: OPUS_MODEL,
+        step: 'synthesis',
+        estimated_cost_usd: SYNTHESIS_COST_USD
+      }
+    });
+
+    const synthesisText = stripJsonFences(getTextFromResponse(synthesisResp));
+    const briefRaw = JSON.parse(synthesisText) as unknown;
+    const brief = validateBrief(briefRaw);
+
+    // Step 9 (numbering follows spec; markdown rendered after we know briefId)
+    // Save to product_briefs
+    currentStep = 'save_brief';
+    const { data: briefRow, error: briefInsErr } = await supabase
+      .from('product_briefs')
+      .insert({
+        decision_id: decisionId,
+        brief: brief as unknown as Record<string, unknown>,
+        raw_research: {
+          keywords,
+          search_results: searchResults,
+          decision_snapshot: decision
+        },
+        recommendation: brief.recommendation,
+        confidence: brief.confidence,
+        cost_usd: totalCostUsd,
+        agent_version: AGENT_VERSION
+      })
+      .select('id')
+      .single();
+
+    if (briefInsErr || !briefRow) {
+      throw new Error(
+        `Failed to insert product_brief: ${briefInsErr?.message ?? 'unknown'}`
+      );
+    }
+
+    const briefId = briefRow.id as string;
+
+    // Step 8 — Render markdown (now that briefId exists)
+    currentStep = 'render_markdown';
+    const markdown = renderBriefAsMarkdown(brief, decision, {
+      briefId,
+      costUsd: totalCostUsd
+    });
+
+    // Update brief row with markdown
+    const { error: mdUpdateErr } = await supabase
+      .from('product_briefs')
+      .update({ markdown })
+      .eq('id', briefId);
+
+    if (mdUpdateErr) {
+      throw new Error(`Failed to save markdown: ${mdUpdateErr.message}`);
+    }
+
+    // Step 10 — Write opportunity gaps to niche_memory
+    currentStep = 'write_niche_memory';
+    for (const gap of brief.market_summary.opportunity_gaps) {
+      const memoryKey = gap.toLowerCase().trim().slice(0, 200);
+      if (!memoryKey) continue;
+
+      const { data: existing, error: fetchErr } = await supabase
+        .from('niche_memory')
+        .select('id, evidence_count')
+        .eq('niche_tag', nicheTag)
+        .eq('memory_key', memoryKey)
+        .maybeSingle();
+
+      if (fetchErr) {
+        console.error(`  niche_memory fetch error for "${memoryKey}":`, fetchErr.message);
+        continue;
+      }
+
+      if (existing) {
+        const newCount = (existing.evidence_count ?? 1) + 1;
+        const { error: updErr } = await supabase
+          .from('niche_memory')
+          .update({
+            evidence_count: newCount,
+            last_updated_at: new Date().toISOString()
+          })
+          .eq('id', existing.id);
+        if (updErr) {
+          console.error(`  niche_memory update error:`, updErr.message);
+        }
+      } else {
+        const { error: insErr } = await supabase.from('niche_memory').insert({
+          niche_tag: nicheTag,
+          memory_key: memoryKey,
+          memory_value: {
+            observed_in_brief: briefId,
+            gap_description: gap
+          },
+          confidence: 0.5,
+          source: 'research_agent',
+          evidence_count: 1
+        });
+        if (insErr) {
+          console.error(`  niche_memory insert error:`, insErr.message);
+        }
+      }
+    }
+
+    // Step 11 — Save markdown to disk
+    currentStep = 'save_markdown_disk';
+    const briefsDir = path.resolve(process.cwd(), 'briefs');
+    await mkdir(briefsDir, { recursive: true });
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const filename = `${dateStr}-${decisionId.slice(0, 8)}.md`;
+    const filepath = path.join(briefsDir, filename);
+    await writeFile(filepath, markdown, 'utf-8');
+
+    console.log(`  brief markdown written to ${filepath}`);
+
+    // Step 12 — Release claim, advance status to brief_ready
+    currentStep = 'release_claim';
+    const { error: releaseErr } = await supabase
+      .from('decisions_needed')
+      .update({
+        status: 'brief_ready',
+        claimed_by: null,
+        claimed_at: null
+      })
+      .eq('id', decisionId);
+
+    if (releaseErr) {
+      throw new Error(`Failed to release claim: ${releaseErr.message}`);
+    }
+    claimed = false; // success path — claim already released
+
+    // Step 13 — Complete agent_runs
+    currentStep = 'complete_agent_run';
+    const { error: completeErr } = await supabase
+      .from('agent_runs')
+      .update({
+        status: 'succeeded',
+        completed_at: new Date().toISOString(),
+        output_ref: briefId,
+        cost_usd: totalCostUsd,
+        metadata: {
+          keywords_used: keywords,
+          num_listings: searchResults.length,
+          etsy_searches: keywords.length
+        }
+      })
+      .eq('id', runId);
+
+    if (completeErr) {
+      throw new Error(`Failed to complete agent_runs: ${completeErr.message}`);
+    }
+
+    await log({
+      agent: 'intel',
+      action: 'research.complete',
+      description: `Research brief generated for decision ${decisionId.slice(0, 8)} (${brief.recommendation}, confidence ${brief.confidence.toFixed(2)})`,
+      severity: 'success',
+      metadata: {
+        decision_id: decisionId,
+        brief_id: briefId,
+        recommendation: brief.recommendation,
+        confidence: brief.confidence,
+        cost_usd: totalCostUsd,
+        markdown_path: filepath
+      }
+    });
+
+    return { briefId, totalCostUsd };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+
+    await log({
+      agent: 'intel',
+      action: 'research.failed',
+      description: `Research failed at step "${currentStep}" for decision ${decisionId.slice(0, 8)}`,
+      severity: 'error',
+      metadata: {
+        decision_id: decisionId,
+        run_id: runId,
+        step: currentStep,
+        error: msg
+      }
+    });
+
+    if (claimed) {
+      await supabase
+        .from('decisions_needed')
+        .update({ status: 'open', claimed_by: null, claimed_at: null })
+        .eq('id', decisionId);
+    }
+
+    await supabase
+      .from('agent_runs')
+      .update({
+        status: 'failed',
+        completed_at: new Date().toISOString(),
+        error: msg,
+        cost_usd: totalCostUsd
+      })
+      .eq('id', runId);
+
+    throw err;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Brief shape validation
+// ---------------------------------------------------------------------------
+
+function validateBrief(raw: unknown): ProductBrief {
+  if (!raw || typeof raw !== 'object') {
+    throw new Error('Synthesis output is not an object');
+  }
+  const r = raw as Record<string, unknown>;
+
+  const required = [
+    'recommendation',
+    'confidence',
+    'reasoning',
+    'product',
+    'listing',
+    'pricing',
+    'market_summary',
+    'risks'
+  ];
+  for (const key of required) {
+    if (!(key in r)) {
+      throw new Error(`Synthesis output missing required field: ${key}`);
+    }
+  }
+
+  if (!['proceed', 'pivot', 'pass'].includes(r['recommendation'] as string)) {
+    throw new Error(`Invalid recommendation value: ${r['recommendation']}`);
+  }
+
+  if (typeof r['confidence'] !== 'number') {
+    throw new Error('Invalid confidence value');
+  }
+
+  return r as unknown as ProductBrief;
+}
