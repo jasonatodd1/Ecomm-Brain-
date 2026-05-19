@@ -5,7 +5,7 @@
   <title>HillwardStudio Monthly Planner</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600&display=swap" rel="stylesheet">
   <style>
     /* ============================================================
        HillwardStudio A5 Monthly Planner — v2
@@ -124,7 +124,7 @@
     }
     .cover-title {
       font-size: 70pt;
-      font-weight: 300;
+      font-weight: 200;
       line-height: 0.92;
       letter-spacing: -0.025em;
       color: var(--charcoal);
@@ -302,18 +302,6 @@
       display: block;
     }
 
-    .lined {
-      width: 100%;
-      height: 100%;
-      background-image: repeating-linear-gradient(
-        to bottom,
-        transparent 0,
-        transparent calc(8mm - var(--hairline)),
-        var(--stone) calc(8mm - var(--hairline)),
-        var(--stone) 8mm
-      );
-    }
-
     /* ============ PLAIN PAGE ============ */
     .page-plain .plain-top-rule {
       height: var(--hairline);
@@ -442,7 +430,7 @@
       <svg xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMinYMin meet">
         <defs>
           <pattern id="dot-pattern" x="0" y="0" width="18.8976" height="18.8976" patternUnits="userSpaceOnUse">
-            <circle cx="9.4488" cy="9.4488" r="1.16" fill="#A89F92"/>
+            <circle cx="9.4488" cy="9.4488" r="1.45" fill="#A89F92"/>
           </pattern>
         </defs>
         <rect width="100%" height="100%" fill="url(#dot-pattern)"/>
@@ -470,7 +458,16 @@
         <span class="notes-field-line"></span>
       </div>
     </div>
-    <div class="notes-body"><div class="lined"></div></div>
+    <div class="notes-body">
+      <svg xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMinYMin meet">
+        <defs>
+          <pattern id="line-pattern" x="0" y="0" width="100" height="30.2362" patternUnits="userSpaceOnUse">
+            <line x1="0" y1="30" x2="100" y2="30" stroke="#A89F92" stroke-width="0.667"/>
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#line-pattern)"/>
+      </svg>
+    </div>
     <div class="page-foot">
       <span>Monthly Planner — Undated</span>
       <span>Lined</span>
