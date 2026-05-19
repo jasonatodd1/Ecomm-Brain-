@@ -1,8 +1,11 @@
 import { log } from './log.js';
 import type { EtsySearchResult } from '../agents/research/types.js';
 
-// Validate keystring presence at module load; fail fast with a clear error.
+// Validate credentials at module load; fail fast with a clear error.
+// As of Feb 9, 2026 Etsy requires the x-api-key header to be formatted as
+// `${keystring}:${shared_secret}` for all v3 endpoints, including public ones.
 const ETSY_API_KEYSTRING = process.env.ETSY_API_KEYSTRING;
+const ETSY_SHARED_SECRET = process.env.ETSY_SHARED_SECRET;
 
 if (!ETSY_API_KEYSTRING) {
   throw new Error(
@@ -10,6 +13,16 @@ if (!ETSY_API_KEYSTRING) {
       'Add it to .env.local (and Railway Variables) — get one from https://www.etsy.com/developers/your-apps after app approval.'
   );
 }
+
+if (!ETSY_SHARED_SECRET) {
+  throw new Error(
+    'Missing ETSY_SHARED_SECRET environment variable. ' +
+      'As of Feb 9, 2026 Etsy v3 requires both keystring and shared_secret in the x-api-key header. ' +
+      'Add ETSY_SHARED_SECRET to .env.local (and Railway Variables).'
+  );
+}
+
+const ETSY_AUTH_HEADER = `${ETSY_API_KEYSTRING}:${ETSY_SHARED_SECRET}`;
 
 const ETSY_ENDPOINT = 'https://openapi.etsy.com/v3/application/listings/active';
 const DEFAULT_LIMIT = 25;
@@ -75,7 +88,7 @@ export async function searchEtsy(
   try {
     res = await fetch(url, {
       headers: {
-        'x-api-key': ETSY_API_KEYSTRING as string,
+        'x-api-key': ETSY_AUTH_HEADER,
         Accept: 'application/json'
       }
     });
