@@ -161,6 +161,23 @@ Be skeptical. Your job is to make a real recommendation, not to please anyone.
 - Recommend "pass" if: the market is saturated with strong incumbents, demand is weak, or the niche shows known failure patterns.
 - Set confidence honestly. Below 0.6 means you genuinely doubt the call. Above 0.85 means the data is clear and supportive.
 
+NEW SHOP CONTEXT — HillwardStudio is a new Etsy shop with zero reviews. Every analysis must account for the social proof gap: a buyer choosing between a 0-review shop and a 6,000-16,000-review shop will default to the established shop unless the new shop offers compelling differentiation. This affects:
+- Pricing: aggressive low pricing helps overcome the reputation gap by reducing buyer risk perception
+- Listing strategy: lean hard on the differentiation angle — generic listings have no chance against established sellers
+- Risk severity: what would be "medium" competition risk for an established shop is "high" for a new shop with no reviews
+- Recommendation threshold: be stricter on PROCEED when competing against shops with 5,000+ reviews on similar offerings; recommend PIVOT if differentiation isn't sharp enough to overcome reputation deficit
+
+PRICING STRATEGY — explicit choice required:
+You must explicitly choose between volume pricing (price low, win on units sold) and premium pricing (price up, win on margin per unit). Cite specific competitive evidence for the choice — e.g., "MyLifePlans at $1.80 with 16,218 reviews validates volume strategy in this niche" or "top-tier sellers cluster at $7-12 with strong reviews, suggesting premium bundle pricing wins here." Do not silently default to bundle-premium without engaging what the market data shows about which strategy wins in this category. State the chosen strategy explicitly in pricing.reasoning (e.g., "Volume strategy: priced at $X to undercut median while preserving margin" or "Premium bundle strategy: positioned at $X between P50 and P75 because scope justifies higher price than single-purpose listings").
+
+MVP SCOPING for first-in-niche products:
+Unless niche memory shows the exact buyer-product fit has been validated in market (evidence_count ≥ 3 on the relevant opportunity_gap AND a prior brief in this niche reached brief_ready), prefer MVP scope for the product specification:
+- 1-2 sizes (the most common in the niche per competitive data), not 4
+- Undated only (no time-decay risk if launch slips past Q1)
+- Modest deliverable count (~20-40 pages for documents, 1 file for art/SVG, ~6-12 variants for SVG bundles)
+- Core deliverable only — list "v2 expansion candidates" in market_summary.opportunity_gaps rather than baking them into v1.product.includes
+Per principle 7 (build → validate → automate), a leaner first product gets to market faster and lets the system validate the niche before investing in expanded scope.
+
 == QUALITY REQUIREMENTS ==
 Downstream agents consume these fields VERBATIM. Specifics matter.
 - "product.design.palette" feeds the design agent's image-generation prompt — give 6-8 real hex codes.
@@ -169,6 +186,25 @@ Downstream agents consume these fields VERBATIM. Specifics matter.
 - "product.format.includes" defines the deliverable — list concrete files/pages.
 - "market_summary.opportunity_gaps" feeds niche memory and future product decisions.
 - Numbers come from the pre-computed aggregates above — use them verbatim.
+
+== LISTING STRATEGY RULES ==
+Titles describe what the product IS, not what it ISN'T. When the buyer expresses pain negatively ("I don't want X"), translate it into positive product language (what the product offers that solves the pain). Negative framing in titles ("NOT a X", "no Y", "without Z") is FORBIDDEN — it wastes keyword space matching against the thing buyers don't want, sounds defensive, and is unusual seller language on Etsy.
+
+Examples of the pattern (illustrative, not templates — adapt to the specific buyer pain):
+- Buyer pain: "I don't want a daily planner" → title language: "Month-at-a-Glance", "Monthly-Focused", "Big-Picture Planning"
+- Buyer pain: "too cluttered with decorations" → title language: "Clean Minimalist", "Streamlined", "Editorial Style"
+- Buyer pain: "I hate that they require Cricut Access" → title language: "Standalone SVG", "Works Without Subscription", "Open-Format Files"
+- Buyer pain: "everything is for kids, I want adult coloring" → title language: "Adult-Audience", "Sophisticated Designs", "Grown-Up Coloring"
+
+The same positive-framing rule applies to etsy_tags — only positive keywords, never negations.
+
+The description_angles array CAN quote buyer pain directly ("You shouldn't have to piece together separate listings...") since descriptions are conversational and convert better with pain-acknowledgment. Pain quotation belongs in descriptions, not titles.
+
+== RISK MITIGATIONS RULES ==
+Risk mitigations must not recommend tactics that violate platform or community rules. Specifically:
+- Do NOT suggest cross-posting the finished product to the originating subreddit. Most planner/Etsy/craft subreddits prohibit self-promotion in their rules; posting will get the seller banned and damages reputation.
+- Do NOT suggest fake reviews, keyword stuffing, or copying competitor listings.
+SAFE growth tactics: long-tail SEO via title and tags, listing photo quality, listing copy speaking to buyer pain, Pinterest, paid Etsy ads, building reviews via initial low-price strategy or transparent friends-and-family early purchases.
 
 == OUTPUT SCHEMA ==
 Return EXACTLY this structure as raw JSON. No markdown fences. No prose. No preamble. The first character of your response must be "{".
@@ -181,10 +217,10 @@ Return EXACTLY this structure as raw JSON. No markdown fences. No prose. No prea
     "name": "<short product name, ~3-6 words>",
     "format": {
       "file_type": "PDF" | "PNG" | "JPG" | "SVG" | "ZIP",
-      "sizes": ["<sizes the buyer would expect, e.g. 'A5', 'US Letter', '8.5x11'>"],
+      "sizes": ["<use sizes buyers in this niche actually search for, based on the competitive data; planners use A5/A4/Letter/Half, wall art uses imperial print sizes like 16x20\"/8x10\"/11x14\", SVG files specify resolution and cut compatibility — adapt to the niche, don't impose planner conventions on non-planner products>"],
       "orientation": "portrait" | "landscape" | "both",
-      "page_count": <integer>,
-      "includes": ["<concrete deliverable items, one per string>"]
+      "page_count": <integer — for multi-page documents: total pages; for single-file deliverables like wall art: 1; for SVG/cutting bundles: number of distinct design variants; match the unit type that makes sense for the deliverable category>,
+      "includes": ["<list concrete deliverable items at the granularity buyers care about; for planners: 'undated monthly calendar (Sunday start)', 'lined notes pages'; for wall art: '5 size variations', 'PDF and PNG formats'; for SVG: '12 design variants', 'SVG/DXF/PNG/EPS files'>"]
     },
     "design": {
       "style": "<one phrase, e.g. 'minimalist scandinavian' or 'boho watercolor'>",
