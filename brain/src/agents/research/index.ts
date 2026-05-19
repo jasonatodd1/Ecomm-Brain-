@@ -5,6 +5,7 @@ import path from 'node:path';
 import { supabase } from '../../lib/supabase.js';
 import { log } from '../../lib/log.js';
 import { searchEtsy } from '../../lib/etsy-search.js';
+import { mapWithLimit } from '../../lib/concurrency.js';
 
 import {
   buildKeywordExtractionPrompt,
@@ -175,10 +176,11 @@ export async function researchDecision(
       );
     }
 
-    // Step 6 — Search Etsy for each keyword in parallel, deduplicate by listing_id/url
+    // Step 6 — Search Etsy per keyword (rate-limited: 2 in-flight, 200ms stagger),
+    // deduplicate by listing_id/url.
     currentStep = 'search_etsy';
-    const searchArrays = await Promise.all(
-      keywords.map(k => searchEtsy(k, { limit: 25 }))
+    const searchArrays = await mapWithLimit(keywords, 2, 200, k =>
+      searchEtsy(k, { limit: 25 })
     );
 
     const seen = new Set<string>();
@@ -211,7 +213,9 @@ export async function researchDecision(
     );
     const synthesisResp = await anthropic.messages.create({
       model: OPUS_MODEL,
-      max_tokens: 4000,
+      // 6000 leaves headroom for the full brief: 5 top_sellers with notable_features,
+      // 6-8 hex palette, etsy_tags, description_angles, risks. 4000 truncated at line 166.
+      max_tokens: 6000,
       messages: [{ role: 'user', content: synthesisPrompt }]
     });
     totalCostUsd += SYNTHESIS_COST_USD;

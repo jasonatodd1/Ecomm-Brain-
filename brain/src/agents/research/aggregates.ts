@@ -1,4 +1,5 @@
 import { getShop } from '../../lib/etsy-search.js';
+import { mapWithLimit } from '../../lib/concurrency.js';
 import type { EtsySearchResult } from './types.js';
 
 export type MarketAggregates = {
@@ -70,24 +71,23 @@ export async function computeAggregates(
     .sort((a, b) => b.num_favorers - a.num_favorers)
     .slice(0, 5);
 
-  // Enrich the top 5 with shop_name/url/review data in parallel.
+  // Enrich the top 5 with shop_name/url/review data (rate-limited: 2 in-flight,
+  // 200ms stagger — Etsy 429'd 5/5 parallel calls in v2 of this code).
   // /listings/active doesn't return shop info at our app tier (silently drops
   // `includes=Shop`), so we have to do a per-shop fetch. Etsy API is free.
-  const enrichedTop5 = await Promise.all(
-    top5.map(async listing => {
-      const shop = listing.shop_id > 0 ? await getShop(listing.shop_id) : null;
-      return {
-        shop_name: shop?.shop_name ?? '',
-        shop_url: shop?.shop_url ?? '',
-        listing_title: listing.title,
-        listing_url: listing.url,
-        price: round2(listing.price),
-        num_favorers: listing.num_favorers,
-        shop_review_count: shop?.review_count,
-        shop_review_average: shop?.review_average
-      };
-    })
-  );
+  const enrichedTop5 = await mapWithLimit(top5, 2, 200, async listing => {
+    const shop = listing.shop_id > 0 ? await getShop(listing.shop_id) : null;
+    return {
+      shop_name: shop?.shop_name ?? '',
+      shop_url: shop?.shop_url ?? '',
+      listing_title: listing.title,
+      listing_url: listing.url,
+      price: round2(listing.price),
+      num_favorers: listing.num_favorers,
+      shop_review_count: shop?.review_count,
+      shop_review_average: shop?.review_average
+    };
+  });
 
   return {
     listings_analyzed: filtered.length,

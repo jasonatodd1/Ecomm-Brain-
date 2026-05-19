@@ -28,7 +28,9 @@ Test the viability of an AI-operated commerce business. Target: $1k/month profit
 
 8. **No silent failures.** The activity logger escalates with `[ACTIVITY_LOG_FAILED]`. Cost tracking captures every spend in `cost_log`. Status fields enforce coordination. Errors are loud, traceable, and recoverable.
 
-9. **Verify external dependencies before integrating.** Before building a wrapper around an API or service, confirm it actually does what we assume — via the vendor's documentation, an API probe, or a small test call. Assumptions about third-party capabilities are the single most common source of wasted iteration. (Example: built a SerpApi-Etsy wrapper assuming the engine existed; it didn't. Cost: $1.15 and a build cycle.)
+9. **Verify external dependencies before integrating.** Before building a wrapper around an API or service, confirm it actually does what we assume — via the vendor's current documentation, a probe call, or a small test. Assumptions about third-party capabilities are the most common source of wasted iteration in this project. (Examples: built a SerpApi-Etsy wrapper assuming the engine existed when it didn't; built an Etsy v3 client with `x-api-key: keystring` format when Etsy's Feb 2026 change required `keystring:shared_secret`.)
+
+10. **Living docs must actually live.** TODO.md and PRINCIPLES.md are canonical only if kept current. Every Cursor prompt that completes meaningful work updates the relevant docs as part of the same commit. Chat-level architectural decisions get translated into doc updates within the same session. Stale state is worse than no state.
 
 ## System Map
 
