@@ -10,9 +10,11 @@
     "collect:trends": "tsx src/jobs/collect-trends.ts",
     "score": "tsx src/jobs/score-opportunities.ts",
     "seed:planneraddicts": "tsx src/jobs/seed-planneraddicts-decision.ts",
+    "reclassify:reddit": "tsx src/jobs/reclassify-reddit-signals.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.96.0",
     "@supabase/supabase-js": "^2.45.4",
     "dotenv": "^16.4.5"
   },

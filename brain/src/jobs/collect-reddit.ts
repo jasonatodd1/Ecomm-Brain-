@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase.js';
 import { log } from '../lib/log.js';
+import { classifyIntent } from '../lib/classify-intent.js';
 
 const SUBREDDITS = [
   'Etsy',
@@ -10,6 +11,20 @@ const SUBREDDITS = [
   'handmade',
   'cricut'
 ];
+
+// Community knowledge classification:
+//   buyer  — predominantly consumers searching for products to purchase
+//   seller — predominantly makers/sellers discussing shop, craft, platform
+//   mixed  — meaningful mix of both; LLM call needed to distinguish
+const SUBREDDIT_CATEGORIES: Record<string, 'buyer' | 'seller' | 'mixed'> = {
+  Etsy: 'mixed',            // buyers searching + sellers discussing platform
+  EtsySellers: 'seller',    // explicitly for Etsy shop owners; almost all seller perspective
+  planneraddicts: 'buyer',  // planner enthusiasts looking to buy/find products
+  PlannerCommunity: 'buyer',// same audience as planneraddicts, consumer-focused
+  printables: 'mixed',      // people sharing free printables + people looking for them
+  handmade: 'mixed',        // buyers seeking handmade goods + makers discussing craft
+  cricut: 'mixed'           // Cricut owners buying SVG files + makers using machine to sell
+};
 
 const BUYER_INTENT_PATTERNS = [
   /\bi('m| am)?\s+looking\s+for\b/i,
@@ -25,6 +40,7 @@ const BUYER_INTENT_PATTERNS = [
 const USER_AGENT = 'brain-orchestrator/0.0.1 (autonomous ecommerce intel)';
 const POLITENESS_MS = 2000;
 const POSTS_PER_SUB = 50;
+const ESTIMATED_HAIKU_COST_USD = 0.001;
 
 interface RedditPost {
   data: {
@@ -75,7 +91,9 @@ async function main(): Promise<void> {
   });
 
   let totalPosts = 0;
-  let buyerIntentPosts = 0;
+  let classifiedBuyer = 0;
+  let classifiedSeller = 0;
+  let classifiedOther = 0;
   let succeeded = 0;
   let failed = 0;
 
@@ -95,16 +113,73 @@ async function main(): Promise<void> {
         console.error(`  insert error r/${subreddit}:`, countErr.message);
       }
 
-      const intentHits = posts.filter(
+      const regexHits = posts.filter(
         p =>
           hasBuyerIntent(p.data.title) || hasBuyerIntent(p.data.selftext ?? '')
       );
 
-      if (intentHits.length > 0) {
-        const intentRows = intentHits.map(p => ({
+      const category = SUBREDDIT_CATEGORIES[subreddit] ?? 'mixed';
+
+      for (const p of regexHits) {
+        let metricType: string;
+        let llmIntent: string | null = null;
+        let llmConfidence: number | null = null;
+
+        if (category === 'seller') {
+          // No LLM needed — whole subreddit is seller-perspective
+          metricType = 'seller_pain_point';
+        } else {
+          // buyer or mixed — ask the classifier
+          const result = await classifyIntent({
+            title: p.data.title,
+            body: p.data.selftext ?? '',
+            subreddit,
+            score: p.data.score
+          });
+
+          llmIntent = result.intent;
+          llmConfidence = result.confidence;
+
+          if (result.intent === 'buyer') {
+            metricType = 'buyer_intent_post';
+          } else if (result.intent === 'seller') {
+            metricType = 'seller_pain_point';
+          } else {
+            metricType = 'reddit_discussion';
+          }
+
+          // Log cost
+          await log({
+            agent: 'intel',
+            action: 'cost.api_call',
+            description: `Haiku classification: r/${subreddit} "${p.data.title.slice(0, 60)}"`,
+            metadata: {
+              provider: 'anthropic',
+              model: 'claude-haiku-4-5',
+              estimated_cost_usd: ESTIMATED_HAIKU_COST_USD
+            }
+          });
+        }
+
+        // Log per-classification
+        await log({
+          agent: 'intel',
+          action: 'reddit.classify',
+          description: `r/${subreddit} → ${metricType}: "${p.data.title.slice(0, 80)}"`,
+          metadata: {
+            post_id: p.data.id,
+            subreddit,
+            subreddit_category: category,
+            llm_intent: llmIntent,
+            llm_confidence: llmConfidence,
+            final_metric_type: metricType
+          }
+        });
+
+        const { error: insertErr } = await supabase.from('signals').insert({
           source: 'reddit',
           keyword: subreddit,
-          metric_type: 'buyer_intent_post',
+          metric_type: metricType,
           value: p.data.score,
           metadata: {
             subreddit,
@@ -116,22 +191,23 @@ async function main(): Promise<void> {
             num_comments: p.data.num_comments,
             created_utc: p.data.created_utc
           }
-        }));
+        });
 
-        const { error: intentErr } = await supabase
-          .from('signals')
-          .insert(intentRows);
-        if (intentErr) {
-          console.error(`  intent insert error r/${subreddit}:`, intentErr.message);
+        if (insertErr) {
+          console.error(`  insert error r/${subreddit} post ${p.data.id}:`, insertErr.message);
         }
+
+        if (metricType === 'buyer_intent_post') classifiedBuyer++;
+        else if (metricType === 'seller_pain_point') classifiedSeller++;
+        else classifiedOther++;
       }
 
       totalPosts += posts.length;
-      buyerIntentPosts += intentHits.length;
       succeeded++;
 
       console.log(
-        `  ok r/${subreddit}: ${posts.length} posts, ${intentHits.length} buyer-intent`
+        `  ok r/${subreddit} [${category}]: ${posts.length} posts, ` +
+          `${regexHits.length} regex hits classified`
       );
 
       await new Promise(r => setTimeout(r, POLITENESS_MS));
@@ -147,13 +223,18 @@ async function main(): Promise<void> {
   await log({
     agent: 'intel',
     action: 'reddit.complete',
-    description: `Reddit scan done: ${succeeded}/${SUBREDDITS.length} subreddits, ${totalPosts} posts scanned, ${buyerIntentPosts} buyer-intent signals in ${durationSec}s`,
+    description:
+      `Reddit scan done: ${succeeded}/${SUBREDDITS.length} subreddits, ` +
+      `${totalPosts} posts scanned, ` +
+      `${classifiedBuyer} buyer / ${classifiedSeller} seller / ${classifiedOther} other in ${durationSec}s`,
     severity: failed > 0 ? 'warning' : 'success',
     metadata: {
       succeeded,
       failed,
       total_posts: totalPosts,
-      buyer_intent_count: buyerIntentPosts,
+      classified_buyer: classifiedBuyer,
+      classified_seller: classifiedSeller,
+      classified_other: classifiedOther,
       duration_sec: durationSec
     }
   });
