@@ -11,6 +11,7 @@ import {
   buildSynthesisPrompt
 } from './prompts.js';
 import { renderBriefAsMarkdown } from './render-markdown.js';
+import { computeAggregates, type MarketAggregates } from './aggregates.js';
 import type {
   DecisionRecord,
   EtsySearchResult,
@@ -194,12 +195,16 @@ export async function researchDecision(
     }
     totalCostUsd += keywords.length * ETSY_COST_USD;
 
+    // Step 6.5 — Compute market aggregates in code (LLMs are unreliable at stats)
+    const aggregates = computeAggregates(searchResults);
+
     // Step 7 — Synthesize brief via Opus
     currentStep = 'synthesize_brief';
     const synthesisPrompt = buildSynthesisPrompt(
       decision,
       nicheMemory,
-      searchResults
+      searchResults,
+      aggregates
     );
     const synthesisResp = await anthropic.messages.create({
       model: OPUS_MODEL,
@@ -223,6 +228,9 @@ export async function researchDecision(
     const synthesisText = stripJsonFences(getTextFromResponse(synthesisResp));
     const briefRaw = JSON.parse(synthesisText) as unknown;
     const brief = validateBrief(briefRaw);
+
+    // Step 7.5 — Drift detection: trust computed aggregates over LLM output
+    await reconcileNumericDrift(brief, aggregates, decisionId);
 
     // Step 9 (numbering follows spec; markdown rendered after we know briefId)
     // Save to product_briefs
@@ -422,6 +430,78 @@ export async function researchDecision(
 // ---------------------------------------------------------------------------
 // Brief shape validation
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Drift detection — reconcile LLM numeric output against computed aggregates.
+// LLMs are unreliable at statistics. Always trust computed values; log drift
+// when the LLM diverges so we can monitor model behaviour.
+// ---------------------------------------------------------------------------
+
+const PRICE_EPSILON = 0.01;
+
+function pricesDiffer(a: number | undefined, b: number): boolean {
+  if (typeof a !== 'number') return true;
+  return Math.abs(a - b) > PRICE_EPSILON;
+}
+
+async function reconcileNumericDrift(
+  brief: ProductBrief,
+  aggregates: MarketAggregates,
+  decisionId: string
+): Promise<void> {
+  const llm = brief.market_summary;
+
+  const drift: Record<string, { llm: unknown; computed: unknown }> = {};
+
+  if (llm.listings_analyzed !== aggregates.listings_analyzed) {
+    drift['listings_analyzed'] = {
+      llm: llm.listings_analyzed,
+      computed: aggregates.listings_analyzed
+    };
+  }
+  if (pricesDiffer(llm.median_price, aggregates.median_price)) {
+    drift['median_price'] = {
+      llm: llm.median_price,
+      computed: aggregates.median_price
+    };
+  }
+  if (
+    !llm.price_range ||
+    pricesDiffer(llm.price_range.p25, aggregates.price_range.p25) ||
+    pricesDiffer(llm.price_range.p50, aggregates.price_range.p50) ||
+    pricesDiffer(llm.price_range.p75, aggregates.price_range.p75)
+  ) {
+    drift['price_range'] = {
+      llm: llm.price_range,
+      computed: aggregates.price_range
+    };
+  }
+  if (llm.median_review_count !== aggregates.median_review_count) {
+    drift['median_review_count'] = {
+      llm: llm.median_review_count,
+      computed: aggregates.median_review_count
+    };
+  }
+
+  // Always override with computed values — they are the source of truth.
+  brief.market_summary.listings_analyzed = aggregates.listings_analyzed;
+  brief.market_summary.median_price = aggregates.median_price;
+  brief.market_summary.price_range = aggregates.price_range;
+  brief.market_summary.median_review_count = aggregates.median_review_count;
+
+  if (Object.keys(drift).length > 0) {
+    await log({
+      agent: 'intel',
+      action: 'synthesis.numeric_drift',
+      description: `LLM market_summary numbers diverged from computed aggregates (${Object.keys(drift).join(', ')})`,
+      severity: 'warning',
+      metadata: {
+        decision_id: decisionId,
+        drift
+      }
+    });
+  }
+}
 
 function validateBrief(raw: unknown): ProductBrief {
   if (!raw || typeof raw !== 'object') {

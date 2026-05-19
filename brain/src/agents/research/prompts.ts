@@ -3,6 +3,7 @@ import type {
   EtsySearchResult,
   NicheMemoryRow
 } from './types.js';
+import type { MarketAggregates } from './aggregates.js';
 
 // ---------------------------------------------------------------------------
 // (a) Keyword extraction
@@ -44,8 +45,8 @@ Output 4-6 search keywords this buyer (or buyers like them) would actually type 
 == OUTPUT FORMAT ==
 Return ONLY a JSON array of strings. No markdown fences. No preamble. No explanation.
 
-Example output for an A5 monthly calendar buyer:
-["a5 monthly calendar printable","a5 planner insert","monthly calendar template","printable planner pages","year calendar pdf"]`;
+Example output for someone wanting custom kitchen labels:
+["pantry labels printable","kitchen organization labels","minimalist spice jar labels","editable canister labels","kitchen pantry stickers"]`;
 }
 
 // ---------------------------------------------------------------------------
@@ -65,6 +66,29 @@ function formatNicheMemory(memory: NicheMemoryRow[]): string {
       return `[${i + 1}] niche=${row.niche_tag ?? '?'} key="${row.memory_key ?? '?'}" confidence=${row.confidence ?? '?'} evidence_count=${row.evidence_count ?? '?'} value=${value}`;
     })
     .join('\n');
+}
+
+function formatAggregates(aggregates: MarketAggregates): string {
+  if (aggregates.listings_analyzed === 0) {
+    return '(No listings with complete price + review data — competitive aggregates unavailable. Note this in your reasoning and risks.)';
+  }
+
+  const lines: string[] = [
+    `listings_analyzed: ${aggregates.listings_analyzed}`,
+    `median_price: $${aggregates.median_price.toFixed(2)}`,
+    `price_range: P25=$${aggregates.price_range.p25.toFixed(2)}, P50=$${aggregates.price_range.p50.toFixed(2)}, P75=$${aggregates.price_range.p75.toFixed(2)}`,
+    `median_review_count: ${aggregates.median_review_count}`,
+    '',
+    'top_sellers (sorted by review count, with notable_features left for you to fill):'
+  ];
+
+  aggregates.top_sellers.forEach((s, i) => {
+    lines.push(
+      `${i + 1}. ${s.shop_name} | ${s.listing_title} | $${s.price.toFixed(2)} | ${s.review_count} reviews | ${s.listing_url}`
+    );
+  });
+
+  return lines.join('\n');
 }
 
 function formatEtsyResults(results: EtsySearchResult[]): string {
@@ -87,7 +111,8 @@ function formatEtsyResults(results: EtsySearchResult[]): string {
 export function buildSynthesisPrompt(
   decision: DecisionRecord,
   nicheMemory: NicheMemoryRow[],
-  searchResults: EtsySearchResult[]
+  searchResults: EtsySearchResult[],
+  aggregates: MarketAggregates
 ): string {
   const ctx = decision.context;
   const source = typeof ctx['source'] === 'string' ? ctx['source'] : 'unknown';
@@ -114,6 +139,11 @@ ${formatNicheMemory(nicheMemory)}
 == ETSY COMPETITIVE DATA (${searchResults.length} listings analyzed) ==
 ${formatEtsyResults(searchResults)}
 
+== PRE-COMPUTED MARKET AGGREGATES ==
+${formatAggregates(aggregates)}
+
+Use these EXACT numerical values in the market_summary section of your output. Do not recalculate. Your job is qualitative synthesis: identify common_formats, common_features, opportunity_gaps, and notable_features per top seller from the raw listing data above.
+
 == EVALUATION RULES ==
 Be skeptical. Your job is to make a real recommendation, not to please anyone.
 
@@ -129,7 +159,7 @@ Downstream agents consume these fields VERBATIM. Specifics matter.
 - "pricing.recommended" sets the actual listing price — must reference the competitive data's quartiles.
 - "product.format.includes" defines the deliverable — list concrete files/pages.
 - "market_summary.opportunity_gaps" feeds niche memory and future product decisions.
-- Numbers (median_price, p25/p50/p75, median_review_count) must be calculated from the data above. If data is sparse, use what you have and note the limitation.
+- Numbers come from the pre-computed aggregates above — use them verbatim.
 
 == OUTPUT SCHEMA ==
 Return EXACTLY this structure as raw JSON. No markdown fences. No prose. No preamble. The first character of your response must be "{".
