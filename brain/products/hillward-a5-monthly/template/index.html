@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>HillwardStudio Planner v1</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      @page {
+        size: A5;
+        margin: 0;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: 'Inter', system-ui, sans-serif;
+        color: #2e2a26;
+      }
+      .page {
+        width: 148mm;
+        height: 210mm;
+        padding: 0;
+        page-break-after: always;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+      }
+      .page:last-child {
+        page-break-after: avoid;
+      }
+      .wordmark {
+        font-size: 32pt;
+        font-weight: 500;
+        letter-spacing: 0.02em;
+      }
+      .small {
+        font-size: 11pt;
+        font-weight: 400;
+        color: #6b6357;
+        margin-top: 8mm;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="wordmark">HillwardStudio</div>
+      <div class="small">Pipeline Test — Page 1</div>
+    </div>
+    <div class="page">
+      <div class="small">Pipeline Test — Page 2</div>
+    </div>
+    <div class="page">
+      <div class="small">Pipeline Test — Page 3</div>
+    </div>
+  </body>
+</html>

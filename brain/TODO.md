@@ -3,7 +3,14 @@
 > Living document. Update when items are completed, priorities shift, or new work is committed to.
 
 ## Current Focus
-- [ ] (none — Research Agent + Etsy integration complete; next major milestone is Product Creation Agent)
+
+### HillwardStudio A5 Monthly Planner v1 — manual fulfillment via code pipeline
+- [x] Code-based PDF rendering pipeline (Puppeteer + HTML/CSS)
+- [ ] Real 28-page template authored by Claude
+- [ ] Iteration to production-ready quality
+- [ ] Listing photos via fal.ai
+- [ ] Etsy shop setup (in parallel)
+- [ ] Listing creation and publish
 
 ## Data-Quality Bugs (open)
 - [ ] `opportunities.niche` field is null on every row — likely scoring engine omission

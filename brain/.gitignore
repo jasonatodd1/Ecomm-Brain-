@@ -1,0 +1,2 @@
+# Rendered product output — regenerable, do not commit binaries
+products/*/dist/

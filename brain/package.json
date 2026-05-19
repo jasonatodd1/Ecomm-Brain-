@@ -14,6 +14,7 @@
     "research": "tsx src/jobs/research-decision.ts",
     "research:planneraddicts": "tsx src/jobs/research-decision.ts",
     "research:nurserywallart": "tsx src/jobs/research-decision.ts --decision-id=2af0ba72-2fe0-452e-b5d8-d888ee4cdeea",
+    "render:planner": "tsx src/render/planner.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -23,6 +24,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.7.0",
+    "puppeteer": "^25.0.4",
     "tsx": "^4.19.1",
     "typescript": "^5.6.2"
   }
