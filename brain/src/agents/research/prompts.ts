@@ -83,8 +83,14 @@ function formatAggregates(aggregates: MarketAggregates): string {
   ];
 
   aggregates.top_sellers.forEach((s, i) => {
+    const reviewBadge =
+      typeof s.shop_review_average === 'number' &&
+      typeof s.shop_review_count === 'number'
+        ? `★${s.shop_review_average.toFixed(2)} from ${s.shop_review_count} reviews`
+        : 'shop reviews unavailable';
+    const shopLabel = s.shop_name || '(shop name unavailable)';
     lines.push(
-      `${i + 1}. ${s.shop_name} | ${s.listing_title} | $${s.price.toFixed(2)} | ${s.num_favorers} favorers | ${s.listing_url}`
+      `${i + 1}. ${shopLabel} (${reviewBadge}) | ${s.listing_title} | $${s.price.toFixed(2)} | ${s.num_favorers} favorers | ${s.listing_url}`
     );
   });
 
@@ -105,7 +111,7 @@ function formatEtsyResults(results: EtsySearchResult[]): string {
         ? `\n    desc=${r.description_preview.slice(0, 200).replace(/\s+/g, ' ').trim()}`
         : '';
       return `[${i + 1}] ${r.title}
-    shop=${r.shop_name} | ${price} | ${favorers}
+    ${price} | ${favorers}
     listing=${r.url}${desc}`;
     })
     .join('\n\n');
@@ -212,12 +218,14 @@ Return EXACTLY this structure as raw JSON. No markdown fences. No prose. No prea
     "median_favorers": <integer>,
     "top_sellers": [
       {
-        "shop_name": "...",
-        "shop_url": "...",
+        "shop_name": "<verbatim from pre-computed aggregates>",
+        "shop_url": "<verbatim from pre-computed aggregates>",
         "listing_title": "...",
         "listing_url": "...",
         "price": <usd>,
         "num_favorers": <integer>,
+        "shop_review_count": <integer matching pre-computed, omit if unavailable>,
+        "shop_review_average": <0-5 number matching pre-computed, omit if unavailable>,
         "notable_features": ["..."]
       }
     ],

@@ -23,8 +23,15 @@ if (!ETSY_SHARED_SECRET) {
 }
 
 const ETSY_AUTH_HEADER = `${ETSY_API_KEYSTRING}:${ETSY_SHARED_SECRET}`;
+const ETSY_HEADERS = {
+  'x-api-key': ETSY_AUTH_HEADER,
+  Accept: 'application/json'
+};
 
-const ETSY_ENDPOINT = 'https://openapi.etsy.com/v3/application/listings/active';
+const LISTINGS_ACTIVE_ENDPOINT =
+  'https://openapi.etsy.com/v3/application/listings/active';
+const SHOPS_ENDPOINT_BASE = 'https://openapi.etsy.com/v3/application/shops';
+
 const DEFAULT_LIMIT = 25;
 const MAX_DESCRIPTION_PREVIEW = 500;
 
@@ -34,31 +41,28 @@ interface EtsyPrice {
   currency_code?: string;
 }
 
-interface EtsyShop {
-  shop_name?: string;
-  url?: string;
-}
-
-interface EtsyImage {
-  url_570xN?: string;
-}
-
 interface EtsyListing {
   listing_id?: number;
+  shop_id?: number;
   title?: string;
   url?: string;
   description?: string;
   price?: EtsyPrice;
   num_favorers?: number;
-  Shop?: EtsyShop;
-  shop?: EtsyShop;
-  Images?: EtsyImage[];
-  images?: EtsyImage[];
 }
 
 interface EtsyListingsActiveResponse {
   count?: number;
   results?: EtsyListing[];
+  error?: string;
+}
+
+interface EtsyShopResponse {
+  shop_id?: number;
+  shop_name?: string;
+  url?: string;
+  review_count?: number;
+  review_average?: number;
   error?: string;
 }
 
@@ -71,6 +75,12 @@ function parsePrice(price?: EtsyPrice): number | null {
   return price.amount / price.divisor;
 }
 
+// ---------------------------------------------------------------------------
+// searchEtsy — public listing search.
+// Note: the `includes=Shop,Images` query param is silently dropped at our app
+// tier (verified empirically Feb 2026). Shop info must be fetched separately
+// via getShop(shop_id). Images are not currently fetched.
+// ---------------------------------------------------------------------------
 export async function searchEtsy(
   query: string,
   options: { limit?: number } = {}
@@ -78,20 +88,14 @@ export async function searchEtsy(
   const limit = Math.min(100, Math.max(1, options.limit ?? DEFAULT_LIMIT));
   const params = new URLSearchParams({
     keywords: query,
-    limit: String(limit),
-    includes: 'Shop,Images'
+    limit: String(limit)
   });
 
-  const url = `${ETSY_ENDPOINT}?${params.toString()}`;
+  const url = `${LISTINGS_ACTIVE_ENDPOINT}?${params.toString()}`;
 
   let res: Response;
   try {
-    res = await fetch(url, {
-      headers: {
-        'x-api-key': ETSY_AUTH_HEADER,
-        Accept: 'application/json'
-      }
-    });
+    res = await fetch(url, { headers: ETSY_HEADERS });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     await log({
@@ -155,23 +159,19 @@ export async function searchEtsy(
   const listings = data.results ?? [];
 
   const mapped: EtsySearchResult[] = listings.map(l => {
-    const shop = l.Shop ?? l.shop ?? {};
-    const images = l.Images ?? l.images ?? [];
     const description = typeof l.description === 'string' ? l.description : '';
-
     return {
       listing_id: typeof l.listing_id === 'number' ? l.listing_id : 0,
+      shop_id: typeof l.shop_id === 'number' ? l.shop_id : 0,
       title: typeof l.title === 'string' ? l.title : '',
       price: parsePrice(l.price),
       currency:
-        typeof l.price?.currency_code === 'string' ? l.price.currency_code : 'USD',
+        typeof l.price?.currency_code === 'string'
+          ? l.price.currency_code
+          : 'USD',
       url: typeof l.url === 'string' ? l.url : '',
-      shop_name: typeof shop.shop_name === 'string' ? shop.shop_name : '',
-      shop_url: typeof shop.url === 'string' ? shop.url : '',
       num_favorers:
         typeof l.num_favorers === 'number' ? l.num_favorers : null,
-      image_url:
-        typeof images[0]?.url_570xN === 'string' ? images[0].url_570xN : undefined,
       description_preview: description.slice(0, MAX_DESCRIPTION_PREVIEW)
     };
   });
@@ -199,4 +199,105 @@ export async function searchEtsy(
   });
 
   return mapped;
+}
+
+// ---------------------------------------------------------------------------
+// getShop — fetch shop_name, shop_url, and review aggregates for one shop_id.
+// Returns null on any failure (fail soft). Cost-logs each call.
+// ---------------------------------------------------------------------------
+export interface EtsyShopInfo {
+  shop_id: number;
+  shop_name: string;
+  shop_url: string;
+  review_count: number;
+  review_average: number;
+}
+
+export async function getShop(shopId: number): Promise<EtsyShopInfo | null> {
+  if (!Number.isInteger(shopId) || shopId <= 0) return null;
+
+  const url = `${SHOPS_ENDPOINT_BASE}/${shopId}`;
+
+  let res: Response;
+  try {
+    res = await fetch(url, { headers: ETSY_HEADERS });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await log({
+      agent: 'intel',
+      action: 'etsy_shop_fetch.failed',
+      description: `Network error fetching shop ${shopId}`,
+      severity: 'warning',
+      metadata: { shop_id: shopId, error: msg }
+    });
+    return null;
+  }
+
+  if (!res.ok) {
+    const bodyText = await res.text().catch(() => '<unreadable>');
+    const retryAfter = res.headers.get('retry-after');
+    const meta: Record<string, unknown> = {
+      shop_id: shopId,
+      status_code: res.status,
+      response_body: bodyText.slice(0, 500)
+    };
+    if (res.status === 429 && retryAfter) {
+      meta['retry_after_seconds'] = retryAfter;
+    }
+
+    await log({
+      agent: 'intel',
+      action: 'etsy_shop_fetch.failed',
+      description: `Etsy shop fetch returned HTTP ${res.status} for shop ${shopId}`,
+      severity: 'warning',
+      metadata: meta
+    });
+    return null;
+  }
+
+  let data: EtsyShopResponse;
+  try {
+    data = (await res.json()) as EtsyShopResponse;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await log({
+      agent: 'intel',
+      action: 'etsy_shop_fetch.failed',
+      description: `Failed to parse Etsy shop JSON for shop ${shopId}`,
+      severity: 'warning',
+      metadata: { shop_id: shopId, error: msg }
+    });
+    return null;
+  }
+
+  if (data.error) {
+    await log({
+      agent: 'intel',
+      action: 'etsy_shop_fetch.failed',
+      description: `Etsy API error for shop ${shopId}`,
+      severity: 'warning',
+      metadata: { shop_id: shopId, etsy_error: data.error }
+    });
+    return null;
+  }
+
+  await log({
+    agent: 'intel',
+    action: 'cost.api_call',
+    description: `Etsy API shop ${shopId}`,
+    metadata: {
+      provider: 'etsy_api',
+      engine: 'shop_fetch',
+      estimated_cost_usd: 0
+    }
+  });
+
+  return {
+    shop_id: typeof data.shop_id === 'number' ? data.shop_id : shopId,
+    shop_name: typeof data.shop_name === 'string' ? data.shop_name : '',
+    shop_url: typeof data.url === 'string' ? data.url : '',
+    review_count: typeof data.review_count === 'number' ? data.review_count : 0,
+    review_average:
+      typeof data.review_average === 'number' ? data.review_average : 0
+  };
 }

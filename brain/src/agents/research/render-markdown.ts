@@ -45,8 +45,16 @@ export function renderBriefAsMarkdown(
     lines.push('### Top Sellers');
     lines.push('');
     m.top_sellers.forEach((s, i) => {
+      const shopLabel = s.shop_url
+        ? `[${s.shop_name || 'shop'}](${s.shop_url})`
+        : s.shop_name || '(shop unavailable)';
+      const reviewBadge =
+        typeof s.shop_review_average === 'number' &&
+        typeof s.shop_review_count === 'number'
+          ? ` (${s.shop_review_count} reviews, ★${s.shop_review_average.toFixed(2)})`
+          : '';
       lines.push(
-        `${i + 1}. **[${s.listing_title}](${s.listing_url})** — ${s.shop_name} — $${s.price.toFixed(2)} — ${s.num_favorers} favorers`
+        `${i + 1}. **${shopLabel}**${reviewBadge} — ${s.listing_title} — $${s.price.toFixed(2)} — ${s.num_favorers} favorers — [listing](${s.listing_url})`
       );
       if (s.notable_features.length > 0) {
         lines.push(`   - Notable: ${s.notable_features.join(', ')}`);

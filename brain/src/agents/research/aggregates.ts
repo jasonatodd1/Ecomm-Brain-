@@ -1,3 +1,4 @@
+import { getShop } from '../../lib/etsy-search.js';
 import type { EtsySearchResult } from './types.js';
 
 export type MarketAggregates = {
@@ -12,6 +13,8 @@ export type MarketAggregates = {
     listing_url: string;
     price: number;
     num_favorers: number;
+    shop_review_count?: number;
+    shop_review_average?: number;
   }>;
 };
 
@@ -35,9 +38,9 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-export function computeAggregates(
+export async function computeAggregates(
   listings: EtsySearchResult[]
-): MarketAggregates {
+): Promise<MarketAggregates> {
   // Only listings with both price and num_favorers count toward stats.
   const filtered = listings.filter(
     (l): l is EtsySearchResult & { price: number; num_favorers: number } =>
@@ -63,23 +66,34 @@ export function computeAggregates(
 
   const medianFavorers = Math.round(percentile(favorers, 50));
 
-  const topSellers = [...filtered]
+  const top5 = [...filtered]
     .sort((a, b) => b.num_favorers - a.num_favorers)
-    .slice(0, 5)
-    .map(l => ({
-      shop_name: l.shop_name,
-      shop_url: l.shop_url,
-      listing_title: l.title,
-      listing_url: l.url,
-      price: round2(l.price),
-      num_favorers: l.num_favorers
-    }));
+    .slice(0, 5);
+
+  // Enrich the top 5 with shop_name/url/review data in parallel.
+  // /listings/active doesn't return shop info at our app tier (silently drops
+  // `includes=Shop`), so we have to do a per-shop fetch. Etsy API is free.
+  const enrichedTop5 = await Promise.all(
+    top5.map(async listing => {
+      const shop = listing.shop_id > 0 ? await getShop(listing.shop_id) : null;
+      return {
+        shop_name: shop?.shop_name ?? '',
+        shop_url: shop?.shop_url ?? '',
+        listing_title: listing.title,
+        listing_url: listing.url,
+        price: round2(listing.price),
+        num_favorers: listing.num_favorers,
+        shop_review_count: shop?.review_count,
+        shop_review_average: shop?.review_average
+      };
+    })
+  );
 
   return {
     listings_analyzed: filtered.length,
     median_price: p50,
     price_range: { p25, p50, p75 },
     median_favorers: medianFavorers,
-    top_sellers: topSellers
+    top_sellers: enrichedTop5
   };
 }

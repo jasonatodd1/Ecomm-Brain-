@@ -56,6 +56,8 @@ export type ProductBrief = {
       listing_url: string;
       price: number;
       num_favorers: number;
+      shop_review_count?: number;
+      shop_review_average?: number;
       notable_features: string[];
     }>;
     common_formats: string[];
@@ -81,14 +83,12 @@ export interface DecisionRecord {
 
 export interface EtsySearchResult {
   listing_id: number;
+  shop_id: number;
   title: string;
   price: number | null;
   currency: string;
   url: string;
-  shop_name: string;
-  shop_url: string;
   num_favorers: number | null;
-  image_url?: string;
   description_preview: string;
 }
 

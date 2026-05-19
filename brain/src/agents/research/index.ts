@@ -188,7 +188,7 @@ export async function researchDecision(
         const key =
           r.listing_id > 0
             ? `id:${r.listing_id}`
-            : r.url || `${r.shop_name}::${r.title}`;
+            : r.url || `${r.shop_id}::${r.title}`;
         if (!seen.has(key) && key.length > 0) {
           seen.add(key);
           searchResults.push(r);
@@ -197,8 +197,9 @@ export async function researchDecision(
     }
     // Etsy Open API is free — no cost accumulation needed here.
 
-    // Step 6.5 — Compute market aggregates in code (LLMs are unreliable at stats)
-    const aggregates = computeAggregates(searchResults);
+    // Step 6.5 — Compute market aggregates in code (LLMs are unreliable at stats).
+    // This step also fan-out fetches shop info for the top 5 sellers in parallel.
+    const aggregates = await computeAggregates(searchResults);
 
     // Step 7 — Synthesize brief via Opus
     currentStep = 'synthesize_brief';
