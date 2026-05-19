@@ -75,6 +75,17 @@ function parsePrice(price?: EtsyPrice): number | null {
   return price.amount / price.divisor;
 }
 
+// Postgres jsonb rejects \u0000 (NUL) and a handful of other low control chars
+// even though JSON.stringify happily emits them. Etsy listing copy is the
+// single most common source — sellers paste decorative text from various tools
+// that embed these bytes. Strip them at the wrapper boundary so any consumer
+// of EtsySearchResult / EtsyShopInfo is safe to insert into Supabase jsonb.
+function sanitizeForJsonb(s: string): string {
+  // Remove NUL bytes and other C0 control chars EXCEPT \t (\x09), \n (\x0A),
+  // and \r (\x0D), which are legal in jsonb.
+  return s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
+}
+
 // ---------------------------------------------------------------------------
 // searchEtsy — public listing search.
 // Note: the `includes=Shop,Images` query param is silently dropped at our app
@@ -163,16 +174,17 @@ export async function searchEtsy(
     return {
       listing_id: typeof l.listing_id === 'number' ? l.listing_id : 0,
       shop_id: typeof l.shop_id === 'number' ? l.shop_id : 0,
-      title: typeof l.title === 'string' ? l.title : '',
+      title: sanitizeForJsonb(typeof l.title === 'string' ? l.title : ''),
       price: parsePrice(l.price),
-      currency:
-        typeof l.price?.currency_code === 'string'
-          ? l.price.currency_code
-          : 'USD',
-      url: typeof l.url === 'string' ? l.url : '',
+      currency: sanitizeForJsonb(
+        typeof l.price?.currency_code === 'string' ? l.price.currency_code : 'USD'
+      ),
+      url: sanitizeForJsonb(typeof l.url === 'string' ? l.url : ''),
       num_favorers:
         typeof l.num_favorers === 'number' ? l.num_favorers : null,
-      description_preview: description.slice(0, MAX_DESCRIPTION_PREVIEW)
+      description_preview: sanitizeForJsonb(
+        description.slice(0, MAX_DESCRIPTION_PREVIEW)
+      )
     };
   });
 
@@ -294,8 +306,10 @@ export async function getShop(shopId: number): Promise<EtsyShopInfo | null> {
 
   return {
     shop_id: typeof data.shop_id === 'number' ? data.shop_id : shopId,
-    shop_name: typeof data.shop_name === 'string' ? data.shop_name : '',
-    shop_url: typeof data.url === 'string' ? data.url : '',
+    shop_name: sanitizeForJsonb(
+      typeof data.shop_name === 'string' ? data.shop_name : ''
+    ),
+    shop_url: sanitizeForJsonb(typeof data.url === 'string' ? data.url : ''),
     review_count: typeof data.review_count === 'number' ? data.review_count : 0,
     review_average:
       typeof data.review_average === 'number' ? data.review_average : 0
