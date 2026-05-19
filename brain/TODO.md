@@ -5,6 +5,11 @@
 ## Current Focus
 - [ ] (none — Research Agent + Etsy integration complete; next major milestone is Product Creation Agent)
 
+## Data-Quality Bugs (open)
+- [ ] `opportunities.niche` field is null on every row — likely scoring engine omission
+- [ ] `opportunities.source_count` stuck at 1 across all rows — scoring engine doesn't aggregate signals across collection runs (re-confirmation should bump this)
+- [ ] Reddit `post_url` missing from `signals.metadata` — only lives on the opportunity row, breaks signal→opportunity traceability for Reddit signals
+
 ## Backlog (committed, deferred)
 - [ ] Drop dead keywords from seed list (digital planner, printable wall art, custom invitation template); investigate or remove gratitude journal printable (SerpApi failure case)
 - [ ] `expense.ts` utility for programmatic cost logging (no more raw SQL inserts)
@@ -71,3 +76,8 @@
 ### Research Agent Tuning Pass 1
 - [x] Synthesis prompt v2 (brain/src/agents/research/prompts.ts): 6 improvements — (1) positive-title rule forbidding "NOT a X" negations, (2) explicit volume-vs-premium pricing choice with competitive citation, (3) MVP scoping default for first-in-niche products, (4) RISK MITIGATIONS forbidding community-rule violations (no subreddit cross-posting), (5) NEW SHOP CONTEXT acknowledging HillwardStudio's 0-review reputation deficit, (6) cross-category field annotations for sizes/page_count/includes so the schema works for wall art and SVG bundles, not just planners
 - [x] v4 brief produced (0834bacd-0727-4487-9ef3-ccd0a1c4f34c): MVP scope (28 pages, A5 only, undated), volume pricing ($3.49 vs v3's $6.50), positive-framed title, new-shop risk HIGH-severity, zero community-rule violations
+
+### Cross-Category Validation
+- [x] Seeded second research decision: nursery wall art printable (decision 2af0ba72, opportunity d7750211)
+- [x] NUL-byte / control-char sanitizer added to brain/src/lib/etsy-search.ts (`sanitizeForJsonb`) — fixes Postgres jsonb rejecting raw Etsy listing data ("Empty or invalid json" error on wall-art listings)
+- [x] Nursery wall art brief produced (ea836ab6-0938-40cf-8523-0694774c12c5, PROCEED 0.62): cross-category prompt annotations all worked — page_count=1, sizes=imperial print sizes (8x10"…24x36"), includes=file/size variants, NOT planner conventions. Vintage bunny print, volume pricing $4.49, IP-protection risk noted (Beatrix Potter), Pinterest as growth lever
