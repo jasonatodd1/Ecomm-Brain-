@@ -1,64 +1,314 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <title>HillwardStudio Planner v1</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
-    <style>
-      @page {
-        size: A5;
-        margin: 0;
-      }
-      * {
-        box-sizing: border-box;
-      }
-      body {
-        margin: 0;
-        padding: 0;
-        font-family: 'Inter', system-ui, sans-serif;
-        color: #2e2a26;
-      }
-      .page {
-        width: 148mm;
-        height: 210mm;
-        padding: 0;
-        page-break-after: always;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        flex-direction: column;
-      }
-      .page:last-child {
-        page-break-after: avoid;
-      }
-      .wordmark {
-        font-size: 32pt;
-        font-weight: 500;
-        letter-spacing: 0.02em;
-      }
-      .small {
-        font-size: 11pt;
-        font-weight: 400;
-        color: #6b6357;
-        margin-top: 8mm;
-      }
-    </style>
-  </head>
-  <body>
-    <div class="page">
-      <div class="wordmark">HillwardStudio</div>
-      <div class="small">Pipeline Test — Page 1</div>
+<head>
+  <meta charset="utf-8">
+  <title>HillwardStudio Monthly Planner</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    /* ============================================================
+       HillwardStudio A5 Monthly Planner — v1
+       Spec source: v4 research brief (decision eed67089)
+       Design tokens: Scandinavian warm-neutral palette, Inter type,
+                      0.5pt hairlines, 5mm dot grid, A5 dimensions,
+                      6-hole punch-safe zone on left edge.
+       ============================================================ */
+
+    :root {
+      /* Palette */
+      --white: #FFFFFF;
+      --off-white: #F7F5F2;
+      --cream: #EDE8E1;
+      --sand: #D6CFC4;
+      --stone: #A89F92;
+      --slate: #6B6357;
+      --charcoal: #2E2A26;
+      --honey: #C9B79C;
+
+      /* Type & line */
+      --font: 'Inter', system-ui, -apple-system, sans-serif;
+      --hairline: 0.5pt;
+
+      /* Layout */
+      --page-w: 148mm;
+      --page-h: 210mm;
+      --margin-top: 12mm;
+      --margin-bottom: 12mm;
+      --margin-right: 10mm;
+      --margin-left: 17mm;  /* punch-safe zone */
+    }
+
+    @page { size: A5; margin: 0; }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      font-family: var(--font);
+      color: var(--charcoal);
+      font-weight: 400;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    /* ----- Page base ----- */
+    .page {
+      width: var(--page-w);
+      height: var(--page-h);
+      padding: var(--margin-top) var(--margin-right) var(--margin-bottom) var(--margin-left);
+      background: var(--off-white);
+      page-break-after: always;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .page:last-child { page-break-after: avoid; }
+
+    .page-label {
+      font-size: 7pt;
+      font-weight: 500;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: var(--stone);
+      margin-bottom: 6mm;
+    }
+
+    /* ----- Cover ----- */
+    .page-cover {
+      background: var(--cream);
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 30mm 10mm 30mm 17mm;
+    }
+    .cover-eyebrow {
+      font-size: 8pt;
+      font-weight: 500;
+      letter-spacing: 0.42em;
+      text-transform: uppercase;
+      color: var(--slate);
+      margin-bottom: 14mm;
+    }
+    .cover-title {
+      font-size: 34pt;
+      font-weight: 300;
+      letter-spacing: -0.015em;
+      line-height: 1.05;
+      color: var(--charcoal);
+      margin-bottom: 12mm;
+    }
+    .cover-rule {
+      width: 22mm;
+      height: var(--hairline);
+      background: var(--slate);
+      margin: 0 auto 10mm;
+    }
+    .cover-subtitle {
+      font-size: 8pt;
+      font-weight: 400;
+      letter-spacing: 0.32em;
+      text-transform: uppercase;
+      color: var(--slate);
+    }
+
+    /* ----- Calendar pages ----- */
+    .month-header {
+      display: flex;
+      gap: 10mm;
+      margin-bottom: 6mm;
+    }
+    .month-field {
+      display: flex;
+      align-items: baseline;
+      gap: 3mm;
+      flex: 1;
+    }
+    .month-field.month-field-year { flex: 0 0 38mm; }
+    .month-field-label {
+      font-size: 7pt;
+      font-weight: 500;
+      letter-spacing: 0.26em;
+      text-transform: uppercase;
+      color: var(--stone);
+      white-space: nowrap;
+    }
+    .month-field-line {
+      flex: 1;
+      height: var(--hairline);
+      background: var(--stone);
+    }
+    .day-labels {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      margin-bottom: 1.5mm;
+    }
+    .day-label {
+      font-size: 7pt;
+      font-weight: 500;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--slate);
+      text-align: center;
+      padding: 1mm 0;
+    }
+    .calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      grid-template-rows: repeat(6, 1fr);
+      flex: 1;
+      min-height: 140mm;
+      border-top: var(--hairline) solid var(--stone);
+      border-left: var(--hairline) solid var(--stone);
+    }
+    .calendar-cell {
+      border-right: var(--hairline) solid var(--stone);
+      border-bottom: var(--hairline) solid var(--stone);
+    }
+    .month-footer {
+      margin-top: 4mm;
+      font-size: 7pt;
+      font-weight: 400;
+      letter-spacing: 0.26em;
+      text-transform: uppercase;
+      color: var(--stone);
+    }
+
+    /* ----- Notes pages ----- */
+    .notes-body { flex: 1; position: relative; }
+    .dot-grid {
+      width: 100%;
+      height: 100%;
+      background-image: radial-gradient(circle, var(--stone) 0.35mm, transparent 0.4mm);
+      background-size: 5mm 5mm;
+      background-position: 0 0;
+    }
+    .lined {
+      width: 100%;
+      height: 100%;
+      background-image: linear-gradient(
+        to bottom,
+        transparent calc(8mm - var(--hairline)),
+        var(--stone) calc(8mm - var(--hairline)),
+        var(--stone) 8mm,
+        transparent 8mm
+      );
+      background-size: 100% 8mm;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Page 1: Cover -->
+  <div class="page page-cover">
+    <div class="cover-eyebrow">HillwardStudio</div>
+    <div class="cover-title">Monthly<br>Planner</div>
+    <div class="cover-rule"></div>
+    <div class="cover-subtitle">Undated &middot; A5 &middot; Both Starts</div>
+  </div>
+
+  <!-- Templates for the 24 calendar pages (filled by inline script below) -->
+  <template id="month-sun-template">
+    <div class="page page-month">
+      <div class="page-label">Sunday Start</div>
+      <div class="month-header">
+        <div class="month-field">
+          <span class="month-field-label">Month</span>
+          <span class="month-field-line"></span>
+        </div>
+        <div class="month-field month-field-year">
+          <span class="month-field-label">Year</span>
+          <span class="month-field-line"></span>
+        </div>
+      </div>
+      <div class="day-labels">
+        <div class="day-label">Sun</div>
+        <div class="day-label">Mon</div>
+        <div class="day-label">Tue</div>
+        <div class="day-label">Wed</div>
+        <div class="day-label">Thu</div>
+        <div class="day-label">Fri</div>
+        <div class="day-label">Sat</div>
+      </div>
+      <div class="calendar-grid"></div>
+      <div class="month-footer">Notes &amp; Priorities</div>
     </div>
-    <div class="page">
-      <div class="small">Pipeline Test — Page 2</div>
+  </template>
+
+  <template id="month-mon-template">
+    <div class="page page-month">
+      <div class="page-label">Monday Start</div>
+      <div class="month-header">
+        <div class="month-field">
+          <span class="month-field-label">Month</span>
+          <span class="month-field-line"></span>
+        </div>
+        <div class="month-field month-field-year">
+          <span class="month-field-label">Year</span>
+          <span class="month-field-line"></span>
+        </div>
+      </div>
+      <div class="day-labels">
+        <div class="day-label">Mon</div>
+        <div class="day-label">Tue</div>
+        <div class="day-label">Wed</div>
+        <div class="day-label">Thu</div>
+        <div class="day-label">Fri</div>
+        <div class="day-label">Sat</div>
+        <div class="day-label">Sun</div>
+      </div>
+      <div class="calendar-grid"></div>
+      <div class="month-footer">Notes &amp; Priorities</div>
     </div>
-    <div class="page">
-      <div class="small">Pipeline Test — Page 3</div>
-    </div>
-  </body>
+  </template>
+
+  <!-- Page 26: Dot Grid Notes -->
+  <div class="page page-notes">
+    <div class="page-label">Dot Grid</div>
+    <div class="notes-body"><div class="dot-grid"></div></div>
+  </div>
+
+  <!-- Page 27: Lined Notes -->
+  <div class="page page-notes">
+    <div class="page-label">Lined</div>
+    <div class="notes-body"><div class="lined"></div></div>
+  </div>
+
+  <!-- Page 28: Plain Notes -->
+  <div class="page page-notes">
+    <div class="page-label">Plain</div>
+    <div class="notes-body"></div>
+  </div>
+
+  <script>
+    /* Synchronous DOM build during HTML parse, so Puppeteer's
+       networkidle0 / fonts.ready see the full page tree. */
+
+    function buildMonths(templateId, count, insertBefore) {
+      const tpl = document.getElementById(templateId);
+      const frag = document.createDocumentFragment();
+      for (let i = 0; i < count; i++) {
+        frag.appendChild(tpl.content.cloneNode(true));
+      }
+      insertBefore.parentNode.insertBefore(frag, insertBefore);
+    }
+
+    function fillCalendarGrids() {
+      document.querySelectorAll('.calendar-grid').forEach(grid => {
+        const f = document.createDocumentFragment();
+        for (let i = 0; i < 42; i++) {
+          const cell = document.createElement('div');
+          cell.className = 'calendar-cell';
+          f.appendChild(cell);
+        }
+        grid.appendChild(f);
+      });
+    }
+
+    const notesAnchor = document.querySelector('.page-notes');
+    buildMonths('month-sun-template', 12, notesAnchor);
+    buildMonths('month-mon-template', 12, notesAnchor);
+    fillCalendarGrids();
+  </script>
+</body>
 </html>
