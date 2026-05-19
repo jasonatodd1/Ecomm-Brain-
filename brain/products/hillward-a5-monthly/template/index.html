@@ -8,39 +8,34 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
   <style>
     /* ============================================================
-       HillwardStudio A5 Monthly Planner — v1
-       Spec source: v4 research brief (decision eed67089)
-       Design tokens: Scandinavian warm-neutral palette, Inter type,
-                      0.5pt hairlines, 5mm dot grid, A5 dimensions,
-                      6-hole punch-safe zone on left edge.
+       HillwardStudio A5 Monthly Planner — v2
+       Editorial cover, priorities sidebar, system marks,
+       sand-color inner grid, weekend column tint, SVG dot grid.
        ============================================================ */
 
     :root {
-      /* Palette */
       --white: #FFFFFF;
       --off-white: #F7F5F2;
       --cream: #EDE8E1;
+      --cover-bg: #E5DDD0;
       --sand: #D6CFC4;
       --stone: #A89F92;
       --slate: #6B6357;
       --charcoal: #2E2A26;
       --honey: #C9B79C;
 
-      /* Type & line */
       --font: 'Inter', system-ui, -apple-system, sans-serif;
       --hairline: 0.5pt;
 
-      /* Layout */
       --page-w: 148mm;
       --page-h: 210mm;
-      --margin-top: 12mm;
-      --margin-bottom: 12mm;
+      --margin-top: 11mm;
+      --margin-bottom: 11mm;
       --margin-right: 10mm;
-      --margin-left: 17mm;  /* punch-safe zone */
+      --margin-left: 17mm;
     }
 
     @page { size: A5; margin: 0; }
-
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     html, body {
@@ -51,7 +46,6 @@
       print-color-adjust: exact;
     }
 
-    /* ----- Page base ----- */
     .page {
       width: var(--page-w);
       height: var(--page-h);
@@ -65,66 +59,105 @@
     }
     .page:last-child { page-break-after: avoid; }
 
-    .page-label {
-      font-size: 7pt;
+    /* ============ System marks (folio + foot) ============ */
+    .page-folio {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: 6.5pt;
       font-weight: 500;
       letter-spacing: 0.28em;
       text-transform: uppercase;
       color: var(--stone);
+      padding-bottom: 4mm;
       margin-bottom: 6mm;
+      border-bottom: var(--hairline) solid var(--sand);
+    }
+    .page-foot {
+      position: absolute;
+      bottom: 6mm;
+      left: 17mm;
+      right: 10mm;
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: 6pt;
+      font-weight: 400;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: var(--stone);
     }
 
-    /* ----- Cover ----- */
+    /* ============ COVER ============ */
     .page-cover {
-      background: var(--cream);
-      align-items: center;
-      justify-content: center;
+      background: var(--cover-bg);
+      padding: 13mm 14mm 13mm 17mm;
+      justify-content: space-between;
+    }
+    .cover-top {
       text-align: center;
-      padding: 30mm 10mm 30mm 17mm;
+      padding-bottom: 7mm;
+      border-bottom: var(--hairline) solid var(--slate);
+    }
+    .cover-wordmark {
+      font-size: 9pt;
+      font-weight: 500;
+      letter-spacing: 0.5em;
+      color: var(--slate);
+      text-transform: uppercase;
+    }
+    .cover-main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 0;
     }
     .cover-eyebrow {
       font-size: 8pt;
       font-weight: 500;
-      letter-spacing: 0.42em;
-      text-transform: uppercase;
+      letter-spacing: 0.32em;
       color: var(--slate);
+      text-transform: uppercase;
       margin-bottom: 14mm;
     }
     .cover-title {
-      font-size: 34pt;
+      font-size: 70pt;
       font-weight: 300;
-      letter-spacing: -0.015em;
-      line-height: 1.05;
+      line-height: 0.92;
+      letter-spacing: -0.025em;
       color: var(--charcoal);
-      margin-bottom: 12mm;
+      text-align: left;
     }
-    .cover-rule {
-      width: 22mm;
-      height: var(--hairline);
-      background: var(--slate);
-      margin: 0 auto 10mm;
+    .cover-bottom {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding-top: 7mm;
+      border-top: var(--hairline) solid var(--slate);
     }
-    .cover-subtitle {
-      font-size: 8pt;
-      font-weight: 400;
-      letter-spacing: 0.32em;
-      text-transform: uppercase;
+    .cover-detail {
+      font-size: 7.5pt;
+      font-weight: 500;
+      letter-spacing: 0.35em;
       color: var(--slate);
+      text-transform: uppercase;
     }
 
-    /* ----- Calendar pages ----- */
+    /* ============ CALENDAR PAGES ============ */
     .month-header {
       display: flex;
-      gap: 10mm;
-      margin-bottom: 6mm;
+      gap: 8mm;
+      margin-bottom: 5mm;
     }
     .month-field {
       display: flex;
       align-items: baseline;
-      gap: 3mm;
+      gap: 2.5mm;
       flex: 1;
     }
-    .month-field.month-field-year { flex: 0 0 38mm; }
+    .month-field.month-field-year { flex: 0 0 32mm; }
     .month-field-label {
       font-size: 7pt;
       font-weight: 500;
@@ -138,15 +171,27 @@
       height: var(--hairline);
       background: var(--stone);
     }
+
+    .month-body {
+      display: flex;
+      gap: 5mm;
+      flex: 1;
+    }
+
+    .month-calendar {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
     .day-labels {
       display: grid;
       grid-template-columns: repeat(7, 1fr);
       margin-bottom: 1.5mm;
     }
     .day-label {
-      font-size: 7pt;
+      font-size: 6.5pt;
       font-weight: 500;
-      letter-spacing: 0.2em;
+      letter-spacing: 0.18em;
       text-transform: uppercase;
       color: var(--slate);
       text-align: center;
@@ -157,60 +202,150 @@
       grid-template-columns: repeat(7, 1fr);
       grid-template-rows: repeat(6, 1fr);
       flex: 1;
-      min-height: 140mm;
+      min-height: 130mm;
       border-top: var(--hairline) solid var(--stone);
       border-left: var(--hairline) solid var(--stone);
+      position: relative;
     }
     .calendar-cell {
-      border-right: var(--hairline) solid var(--stone);
+      border-right: var(--hairline) solid var(--sand);
+      border-bottom: var(--hairline) solid var(--sand);
+    }
+    /* Outer right + bottom borders darker for a clean frame */
+    .calendar-cell:nth-child(7n) { border-right-color: var(--stone); }
+    .calendar-cell:nth-last-child(-n+7) { border-bottom-color: var(--stone); }
+
+    /* Weekend column tint — different positions for Sun-start vs Mon-start */
+    .page-month.month-sun .calendar-cell:nth-child(7n+1),
+    .page-month.month-sun .calendar-cell:nth-child(7n) {
+      background: rgba(214, 207, 196, 0.35);
+    }
+    .page-month.month-mon .calendar-cell:nth-child(7n+6),
+    .page-month.month-mon .calendar-cell:nth-child(7n) {
+      background: rgba(214, 207, 196, 0.35);
+    }
+
+    /* Sidebar — Priorities */
+    .month-sidebar {
+      flex: 0 0 22mm;
+      display: flex;
+      flex-direction: column;
+      padding-top: 4mm;
+    }
+    .sidebar-label {
+      font-size: 6.5pt;
+      font-weight: 500;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: var(--slate);
+      margin-bottom: 4mm;
+      padding-bottom: 2mm;
       border-bottom: var(--hairline) solid var(--stone);
     }
-    .month-footer {
-      margin-top: 4mm;
+    .sidebar-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      flex: 1;
+    }
+    .sidebar-item {
+      display: flex;
+      align-items: baseline;
+      gap: 2mm;
+      padding: 3mm 0;
+      border-bottom: var(--hairline) solid var(--sand);
+    }
+    .sidebar-num {
+      font-size: 6pt;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      color: var(--stone);
+      min-width: 4mm;
+    }
+
+    /* ============ NOTES PAGES ============ */
+    .notes-header {
+      display: flex;
+      gap: 8mm;
+      padding-bottom: 4mm;
+      margin-bottom: 6mm;
+      border-bottom: var(--hairline) solid var(--stone);
+    }
+    .notes-field {
+      display: flex;
+      align-items: baseline;
+      gap: 2.5mm;
+      flex: 1;
+    }
+    .notes-field-label {
       font-size: 7pt;
-      font-weight: 400;
+      font-weight: 500;
       letter-spacing: 0.26em;
       text-transform: uppercase;
       color: var(--stone);
+      white-space: nowrap;
+    }
+    .notes-field-line {
+      flex: 1;
+      height: var(--hairline);
+      background: var(--stone);
     }
 
-    /* ----- Notes pages ----- */
-    .notes-body { flex: 1; position: relative; }
-    .dot-grid {
+    .notes-body {
+      flex: 1;
+      position: relative;
+    }
+    .notes-body svg {
       width: 100%;
       height: 100%;
-      background-image: radial-gradient(circle, var(--stone) 0.35mm, transparent 0.4mm);
-      background-size: 5mm 5mm;
-      background-position: 0 0;
+      display: block;
     }
+
     .lined {
       width: 100%;
       height: 100%;
-      background-image: linear-gradient(
+      background-image: repeating-linear-gradient(
         to bottom,
+        transparent 0,
         transparent calc(8mm - var(--hairline)),
         var(--stone) calc(8mm - var(--hairline)),
-        var(--stone) 8mm,
-        transparent 8mm
+        var(--stone) 8mm
       );
-      background-size: 100% 8mm;
+    }
+
+    /* ============ PLAIN PAGE ============ */
+    .page-plain .plain-top-rule {
+      height: var(--hairline);
+      background: var(--stone);
+      margin-top: 2mm;
     }
   </style>
 </head>
 <body>
 
-  <!-- Page 1: Cover -->
+  <!-- ========== Page 1: COVER ========== -->
   <div class="page page-cover">
-    <div class="cover-eyebrow">HillwardStudio</div>
-    <div class="cover-title">Monthly<br>Planner</div>
-    <div class="cover-rule"></div>
-    <div class="cover-subtitle">Undated &middot; A5 &middot; Both Starts</div>
+    <div class="cover-top">
+      <div class="cover-wordmark">HillwardStudio</div>
+    </div>
+    <div class="cover-main">
+      <div class="cover-eyebrow">Print Edition · 28 Pages</div>
+      <h1 class="cover-title">Monthly<br>Planner</h1>
+    </div>
+    <div class="cover-bottom">
+      <div class="cover-detail">Undated · A5</div>
+      <div class="cover-detail">Sunday &amp; Monday Start</div>
+    </div>
   </div>
 
-  <!-- Templates for the 24 calendar pages (filled by inline script below) -->
+  <!-- ========== Templates for calendar pages ========== -->
   <template id="month-sun-template">
-    <div class="page page-month">
-      <div class="page-label">Sunday Start</div>
+    <div class="page page-month month-sun">
+      <div class="page-folio">
+        <span>HillwardStudio</span>
+        <span class="folio-section">Sunday Start</span>
+      </div>
       <div class="month-header">
         <div class="month-field">
           <span class="month-field-label">Month</span>
@@ -221,23 +356,37 @@
           <span class="month-field-line"></span>
         </div>
       </div>
-      <div class="day-labels">
-        <div class="day-label">Sun</div>
-        <div class="day-label">Mon</div>
-        <div class="day-label">Tue</div>
-        <div class="day-label">Wed</div>
-        <div class="day-label">Thu</div>
-        <div class="day-label">Fri</div>
-        <div class="day-label">Sat</div>
+      <div class="month-body">
+        <div class="month-calendar">
+          <div class="day-labels">
+            <div class="day-label">Sun</div>
+            <div class="day-label">Mon</div>
+            <div class="day-label">Tue</div>
+            <div class="day-label">Wed</div>
+            <div class="day-label">Thu</div>
+            <div class="day-label">Fri</div>
+            <div class="day-label">Sat</div>
+          </div>
+          <div class="calendar-grid"></div>
+        </div>
+        <aside class="month-sidebar">
+          <div class="sidebar-label">Priorities</div>
+          <ol class="sidebar-list"></ol>
+        </aside>
       </div>
-      <div class="calendar-grid"></div>
-      <div class="month-footer">Notes &amp; Priorities</div>
+      <div class="page-foot">
+        <span>Monthly Planner — Undated</span>
+        <span class="page-foot-index"></span>
+      </div>
     </div>
   </template>
 
   <template id="month-mon-template">
-    <div class="page page-month">
-      <div class="page-label">Monday Start</div>
+    <div class="page page-month month-mon">
+      <div class="page-folio">
+        <span>HillwardStudio</span>
+        <span class="folio-section">Monday Start</span>
+      </div>
       <div class="month-header">
         <div class="month-field">
           <span class="month-field-label">Month</span>
@@ -248,67 +397,152 @@
           <span class="month-field-line"></span>
         </div>
       </div>
-      <div class="day-labels">
-        <div class="day-label">Mon</div>
-        <div class="day-label">Tue</div>
-        <div class="day-label">Wed</div>
-        <div class="day-label">Thu</div>
-        <div class="day-label">Fri</div>
-        <div class="day-label">Sat</div>
-        <div class="day-label">Sun</div>
+      <div class="month-body">
+        <div class="month-calendar">
+          <div class="day-labels">
+            <div class="day-label">Mon</div>
+            <div class="day-label">Tue</div>
+            <div class="day-label">Wed</div>
+            <div class="day-label">Thu</div>
+            <div class="day-label">Fri</div>
+            <div class="day-label">Sat</div>
+            <div class="day-label">Sun</div>
+          </div>
+          <div class="calendar-grid"></div>
+        </div>
+        <aside class="month-sidebar">
+          <div class="sidebar-label">Priorities</div>
+          <ol class="sidebar-list"></ol>
+        </aside>
       </div>
-      <div class="calendar-grid"></div>
-      <div class="month-footer">Notes &amp; Priorities</div>
+      <div class="page-foot">
+        <span>Monthly Planner — Undated</span>
+        <span class="page-foot-index"></span>
+      </div>
     </div>
   </template>
 
-  <!-- Page 26: Dot Grid Notes -->
+  <!-- ========== Page 26: Dot Grid ========== -->
   <div class="page page-notes">
-    <div class="page-label">Dot Grid</div>
-    <div class="notes-body"><div class="dot-grid"></div></div>
+    <div class="page-folio">
+      <span>HillwardStudio</span>
+      <span class="folio-section">Dot Grid</span>
+    </div>
+    <div class="notes-header">
+      <div class="notes-field">
+        <span class="notes-field-label">Date</span>
+        <span class="notes-field-line"></span>
+      </div>
+      <div class="notes-field" style="flex: 1.5;">
+        <span class="notes-field-label">Topic</span>
+        <span class="notes-field-line"></span>
+      </div>
+    </div>
+    <div class="notes-body">
+      <svg xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMinYMin meet">
+        <defs>
+          <pattern id="dot-pattern" x="0" y="0" width="18.8976" height="18.8976" patternUnits="userSpaceOnUse">
+            <circle cx="9.4488" cy="9.4488" r="1.16" fill="#A89F92"/>
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#dot-pattern)"/>
+      </svg>
+    </div>
+    <div class="page-foot">
+      <span>Monthly Planner — Undated</span>
+      <span>Dot Grid</span>
+    </div>
   </div>
 
-  <!-- Page 27: Lined Notes -->
+  <!-- ========== Page 27: Lined ========== -->
   <div class="page page-notes">
-    <div class="page-label">Lined</div>
+    <div class="page-folio">
+      <span>HillwardStudio</span>
+      <span class="folio-section">Lined</span>
+    </div>
+    <div class="notes-header">
+      <div class="notes-field">
+        <span class="notes-field-label">Date</span>
+        <span class="notes-field-line"></span>
+      </div>
+      <div class="notes-field" style="flex: 1.5;">
+        <span class="notes-field-label">Topic</span>
+        <span class="notes-field-line"></span>
+      </div>
+    </div>
     <div class="notes-body"><div class="lined"></div></div>
+    <div class="page-foot">
+      <span>Monthly Planner — Undated</span>
+      <span>Lined</span>
+    </div>
   </div>
 
-  <!-- Page 28: Plain Notes -->
-  <div class="page page-notes">
-    <div class="page-label">Plain</div>
+  <!-- ========== Page 28: Plain ========== -->
+  <div class="page page-notes page-plain">
+    <div class="page-folio">
+      <span>HillwardStudio</span>
+      <span class="folio-section">Plain</span>
+    </div>
+    <div class="plain-top-rule"></div>
     <div class="notes-body"></div>
+    <div class="page-foot">
+      <span>Monthly Planner — Undated</span>
+      <span>Plain</span>
+    </div>
   </div>
 
   <script>
-    /* Synchronous DOM build during HTML parse, so Puppeteer's
-       networkidle0 / fonts.ready see the full page tree. */
+    /* Build the 12 + 12 monthly pages, populate 42 cells per grid,
+       populate 8 priority slots per sidebar, and inject sequential
+       numbering (01 / 12 etc) into each page-foot. */
 
-    function buildMonths(templateId, count, insertBefore) {
+    const SIDEBAR_SLOTS = 8;
+
+    function buildMonths(templateId, count, insertBefore, indexLabel) {
       const tpl = document.getElementById(templateId);
-      const frag = document.createDocumentFragment();
       for (let i = 0; i < count; i++) {
-        frag.appendChild(tpl.content.cloneNode(true));
+        const node = tpl.content.cloneNode(true);
+        const pad = String(i + 1).padStart(2, '0');
+        const total = String(count).padStart(2, '0');
+        const idx = node.querySelector('.page-foot-index');
+        if (idx) idx.textContent = `${indexLabel} · ${pad} / ${total}`;
+        insertBefore.parentNode.insertBefore(node, insertBefore);
       }
-      insertBefore.parentNode.insertBefore(frag, insertBefore);
     }
 
     function fillCalendarGrids() {
       document.querySelectorAll('.calendar-grid').forEach(grid => {
-        const f = document.createDocumentFragment();
+        const frag = document.createDocumentFragment();
         for (let i = 0; i < 42; i++) {
           const cell = document.createElement('div');
           cell.className = 'calendar-cell';
-          f.appendChild(cell);
+          frag.appendChild(cell);
         }
-        grid.appendChild(f);
+        grid.appendChild(frag);
+      });
+    }
+
+    function fillSidebars() {
+      document.querySelectorAll('.sidebar-list').forEach(list => {
+        const frag = document.createDocumentFragment();
+        for (let i = 1; i <= SIDEBAR_SLOTS; i++) {
+          const li = document.createElement('li');
+          li.className = 'sidebar-item';
+          const num = document.createElement('span');
+          num.className = 'sidebar-num';
+          num.textContent = String(i).padStart(2, '0');
+          li.appendChild(num);
+          frag.appendChild(li);
+        }
+        list.appendChild(frag);
       });
     }
 
     const notesAnchor = document.querySelector('.page-notes');
-    buildMonths('month-sun-template', 12, notesAnchor);
-    buildMonths('month-mon-template', 12, notesAnchor);
+    buildMonths('month-sun-template', 12, notesAnchor, 'Sunday Start');
+    buildMonths('month-mon-template', 12, notesAnchor, 'Monday Start');
     fillCalendarGrids();
+    fillSidebars();
   </script>
 </body>
 </html>
