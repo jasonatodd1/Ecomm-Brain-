@@ -75,8 +75,15 @@ Body: ${input.body.slice(0, 600) || '(no body)'}`;
       messages: [{ role: 'user', content: userMessage }]
     });
 
-    const raw =
+    const rawText =
       message.content[0]?.type === 'text' ? message.content[0].text.trim() : '';
+
+    // Haiku sometimes wraps JSON in ```json ... ``` fences despite instructions.
+    // Strip them before parsing.
+    const raw = rawText
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/\s*```$/i, '')
+      .trim();
 
     const parsed = JSON.parse(raw) as {
       intent: string;
