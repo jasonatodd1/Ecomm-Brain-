@@ -4,6 +4,7 @@
 .env.*.local
 
 # Node
+node_modules/
 brain/node_modules/
 brain/dist/
 
