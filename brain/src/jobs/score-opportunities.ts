@@ -7,6 +7,11 @@ const SEVEN_DAYS_AGO = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOStrin
 const MIN_REDDIT_UPVOTES = 3;
 const REDDIT_NAME_LIMIT = 60;
 
+// Default niche tag when no source-derived niche is available (Google Trends
+// keywords aren't subreddit-bound). Matches the convention used by the
+// Research Agent's nicheTag fallback in src/agents/research/index.ts.
+const DEFAULT_NICHE = 'general';
+
 interface Signal {
   source: string;
   keyword: string;
@@ -19,6 +24,7 @@ interface Signal {
 interface OpportunityUpsert {
   name: string;
   description: string;
+  niche: string;
   confidence_score: number;
   status: 'new' | 'investigating';
   search_volume: number;
@@ -30,6 +36,46 @@ interface OpportunityUpsert {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+// ---------------------------------------------------------------------------
+// Source-count helpers — count the distinct observations in the signals table
+// that back each opportunity. Replaces the previous hard-coded 1 (data-quality
+// bug 2). Reads from the already-fetched signals array — no extra DB hits.
+//
+// Google Trends: count rows where source='google_trends' AND keyword matches.
+//   Bumps once per collection run per keyword (interest_score + velocity +
+//   rising_related_count = 3 rows per run, so this surfaces collection
+//   recency as well as signal multiplicity).
+//
+// Reddit buyer-intent: count rows where the same post_id has been re-observed.
+//   For a single buyer-intent post, source_count starts at 1 and bumps each
+//   time the same Reddit post gets re-classified across collection runs (i.e.
+//   the post stayed in r/<sub>/new long enough to be picked up again).
+// ---------------------------------------------------------------------------
+
+function buildTrendsSourceCountIndex(signals: Signal[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const s of signals) {
+    if (s.source !== 'google_trends') continue;
+    counts.set(s.keyword, (counts.get(s.keyword) ?? 0) + 1);
+  }
+  return counts;
+}
+
+function buildRedditSourceCountIndex(signals: Signal[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const s of signals) {
+    if (s.source !== 'reddit') continue;
+    if (s.metric_type !== 'buyer_intent_post') continue;
+    const postId =
+      typeof s.metadata['post_id'] === 'string'
+        ? s.metadata['post_id']
+        : null;
+    if (!postId) continue;
+    counts.set(postId, (counts.get(postId) ?? 0) + 1);
+  }
+  return counts;
 }
 
 async function fetchRecentSignals(): Promise<Signal[]> {
@@ -51,6 +97,7 @@ async function fetchRecentSignals(): Promise<Signal[]> {
 
 function scoreGoogleTrends(signals: Signal[]): OpportunityUpsert[] {
   const trendsSignals = signals.filter(s => s.source === 'google_trends');
+  const sourceCountByKeyword = buildTrendsSourceCountIndex(signals);
 
   // Group by keyword, keeping the most recent row per metric_type
   const byKeyword = new Map<string, { interestScore: number; velocityRaw: number }>();
@@ -78,11 +125,12 @@ function scoreGoogleTrends(signals: Signal[]): OpportunityUpsert[] {
       description:
         `${keyword} | interest=${interestScore.toFixed(1)}, ` +
         `velocity=${velocityRaw.toFixed(1)}%, signal=google_trends`,
+      niche: DEFAULT_NICHE,
       confidence_score: confidence,
       status: confidence > 0.4 ? 'new' : 'investigating',
       search_volume: interestScore,
       velocity: velocityRaw,
-      source_count: 1,
+      source_count: sourceCountByKeyword.get(keyword) ?? 1,
       metadata: { source: 'google_trends', via: 'serpapi' },
       updated_at: new Date().toISOString()
     };
@@ -104,14 +152,42 @@ function scoreReddit(signals: Signal[]): OpportunityUpsert[] {
       s.metric_type === 'buyer_intent_post' &&
       s.value >= MIN_REDDIT_UPVOTES
   );
+  const sourceCountByPostId = buildRedditSourceCountIndex(signals);
 
-  return redditSignals.map(sig => {
+  // Dedupe — if the same post_id appears multiple times in the time window
+  // (re-observed across runs), score the most-upvoted observation once.
+  // Without this, source_count was always 1 because the most recent insert
+  // overwrote prior ones via name-based onConflict — but we also produced
+  // N duplicate upsert calls per re-observed post. Cleaner to dedupe here.
+  const byPostId = new Map<string, Signal>();
+  for (const sig of redditSignals) {
+    const postId =
+      typeof sig.metadata['post_id'] === 'string'
+        ? sig.metadata['post_id']
+        : null;
+    if (!postId) continue;
+    const existing = byPostId.get(postId);
+    if (!existing || sig.value > existing.value) {
+      byPostId.set(postId, sig);
+    }
+  }
+
+  return [...byPostId.values()].map(sig => {
+    const postId =
+      typeof sig.metadata['post_id'] === 'string'
+        ? sig.metadata['post_id']
+        : '';
     const title =
       typeof sig.metadata['title'] === 'string' ? sig.metadata['title'] : sig.keyword;
     const subreddit =
       typeof sig.metadata['subreddit'] === 'string' ? sig.metadata['subreddit'] : 'reddit';
+    // Read post_url (new key) with url fallback (legacy key pre-data-quality fix).
     const postUrl =
-      typeof sig.metadata['url'] === 'string' ? sig.metadata['url'] : '';
+      typeof sig.metadata['post_url'] === 'string'
+        ? sig.metadata['post_url']
+        : typeof sig.metadata['url'] === 'string'
+          ? sig.metadata['url']
+          : '';
 
     const truncatedTitle =
       title.length > REDDIT_NAME_LIMIT ? title.slice(0, REDDIT_NAME_LIMIT) : title;
@@ -123,14 +199,16 @@ function scoreReddit(signals: Signal[]): OpportunityUpsert[] {
       name,
       description:
         `${name} | interest=0, velocity=0%, signal=reddit_buyer_intent`,
+      niche: subreddit,
       confidence_score: confidence,
       status: 'new' as const,
       search_volume: 0,
       velocity: 0,
-      source_count: 1,
+      source_count: (postId && sourceCountByPostId.get(postId)) || 1,
       metadata: {
         source: 'reddit',
         subreddit,
+        post_id: postId,
         post_url: postUrl,
         title,
         upvotes: sig.value

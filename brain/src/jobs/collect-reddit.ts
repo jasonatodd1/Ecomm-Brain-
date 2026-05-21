@@ -176,6 +176,10 @@ async function main(): Promise<void> {
           }
         });
 
+        // post_url is the canonical key (data-quality fix). Reddit signals
+        // previously stored `url`, which broke signal→opportunity traceability
+        // because the opportunity row only had `post_url`. Now both layers
+        // speak the same vocabulary; backfill migrated pre-fix rows.
         const { error: insertErr } = await supabase.from('signals').insert({
           source: 'reddit',
           keyword: subreddit,
@@ -186,7 +190,7 @@ async function main(): Promise<void> {
             post_id: p.data.id,
             title: p.data.title,
             text_preview: (p.data.selftext ?? '').slice(0, 500),
-            url: `https://reddit.com${p.data.permalink}`,
+            post_url: `https://reddit.com${p.data.permalink}`,
             score: p.data.score,
             num_comments: p.data.num_comments,
             created_utc: p.data.created_utc

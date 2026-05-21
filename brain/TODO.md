@@ -4,17 +4,18 @@
 
 ## Current Focus
 
-### Fix the 3 data-quality bugs (closes the discovery-pipeline loop before Listing Agent build)
-- [ ] `opportunities.niche` field is null on every row — likely scoring engine omission
-- [ ] `opportunities.source_count` stuck at 1 across all rows — scoring engine doesn't aggregate signals across collection runs (re-confirmation should bump this)
-- [ ] Reddit `post_url` missing from `signals.metadata` — only lives on the opportunity row, breaks signal→opportunity traceability for Reddit signals
-
 ### Drive first sale (both listings live, daily monitor capturing baseline)
 - [ ] Run `npm run monitor:listings` daily by hand for 3–5 days before scheduling cron — confirms baseline behavior, surfaces edge cases (state changes, sold_out, tag edits, etc.) per principle #7
 - [ ] First sale (validation milestone) — both listings active, awaiting market signal
 
+### Begin Listing Agent build (Tuning Pass 2 + SEO engine + data layer all green)
+- [ ] Migration `0007_assets.sql` (see `LISTING_AGENT_REQUIREMENTS.md` §6)
+- [ ] `gen` + `upscale` tools UPSERT into `assets` in addition to `activity`
+- [ ] `npm run link:asset` CLI for backfilling the bunny + planner assets generated outside the system
+- [ ] Asset pipeline gap decision (see Backlog) — expand-pipeline vs constrain-schema before first agent publish
+
 ## Data-Quality Bugs (open)
-- _All three currently in Current Focus above; fix lands next._
+- _All three fixed; see "Data-Quality Bug Fixes" section in Done._
 
 ## Backlog (committed, deferred)
 - [ ] **Asset pipeline gap (Listing Agent prerequisite).** v2 bunny brief claims deliverables that the current `resize-print-variants.ts` pipeline does NOT yet produce: master JPG at 300 DPI sized for all 5 print sizes (have JPGs but not packaged as one master + ratio guide), PDF with crop marks (not built), transparent PNG for layered/digital use (not built), 1-page print & ratio guide PDF (not built). Decide before the Listing Agent first publishes: either (a) expand `resize-print-variants.ts` + add `package-deliverables.ts` to produce the full claimed set, OR (b) constrain the brief schema (Research Agent's `whats_included`) to only claim files the pipeline produces today. Tracking item — no code action yet, but flag before Listing Agent ships.
@@ -51,6 +52,12 @@
 - [ ] Backup strategy for Supabase
 
 ## Done
+
+### Data-Quality Bug Fixes (`fix(data-quality)` commit)
+- [x] **Bug 1 — `opportunities.niche` null on every row.** Fixed in `brain/src/jobs/score-opportunities.ts`: added `niche` to `OpportunityUpsert`, written on every upsert. Reddit opps inherit the subreddit (already in signal metadata as `subreddit`); Google Trends opps get `DEFAULT_NICHE = 'general'` (mirrors the Research Agent's `nicheTag` fallback in `src/agents/research/index.ts`). Backfill: `UPDATE opportunities SET niche = CASE WHEN metadata->>'source'='reddit' THEN metadata->>'subreddit' ELSE 'general' END`. Result: **opps with non-null niche: 0 → 11** (9 'general', 2 'planneraddicts').
+- [x] **Bug 2 — `opportunities.source_count` stuck at 1.** Fixed in `brain/src/jobs/score-opportunities.ts`: added `buildTrendsSourceCountIndex` + `buildRedditSourceCountIndex` helpers that count matching rows in the already-fetched `signals` array (no extra DB hits). Google Trends opps count by `(source='google_trends', keyword=opp.name)` — bumps once per metric_type per collection run. Reddit opps count by `(source='reddit', metric_type='buyer_intent_post', metadata.post_id)` — bumps when the same buyer post is re-classified across runs. Also added Reddit dedupe-by-`post_id` so re-observed posts produce one upsert (highest-upvote sample). Backfill ran the same logic via SQL; **first pass** counted 0 for Reddit opps because the 2 pre-existing rows lacked `post_id` in metadata (they pre-date the new code) — **two-step fix** first joined opp.metadata ← signal.metadata via `post_url` to populate `post_id`, then re-ran the count. Result: **opps with source_count > 1: 0 → 9** (the 9 trends keywords; both Reddit posts legitimately stay at 1, observed once).
+- [x] **Bug 3 — Reddit `post_url` missing from `signals.metadata`.** Fixed in `brain/src/jobs/collect-reddit.ts`: renamed metadata key `url` → `post_url` on the per-post buyer-signal insert so signal vocabulary now matches what opportunities have always carried. `score-opportunities.ts` reads `metadata.post_url` with `metadata.url` as a one-cycle fallback for any signals that pre-date the fix and slip through backfill. Backfill: `UPDATE signals SET metadata = jsonb_set(metadata, '{post_url}', metadata->'url') WHERE source='reddit' AND metadata ? 'url' AND NOT (metadata ? 'post_url')`. Result: **reddit signals with post_url: 0 → 16** (all individual posts; the 7 `new_post_count` aggregate rows correctly stay without a URL since they don't represent a single post).
+- [x] **Edge case surfaced during backfill** — the 2 pre-existing Reddit opportunities (seeded manually before the new code ever ran) lacked `metadata.post_id`; future-run source_count would have returned 0 for them. Backfill restores it by joining on the now-consistent `post_url` key — proves out the design that `post_url` is the canonical cross-table join key for Reddit signals.
 
 ### Research Agent Tuning Pass 2 + Competitive SEO Scoring v1 (the `tune research agent (pass 2)` commit)
 - [x] **`ProductBrief` schema extended** (`brain/src/agents/research/types.ts`, `agent_version='research-v2'`): top-level `audience { persona, primary_search_intent, decision_factors }`; structured `listing.description { hook, why_this_one, whats_included, print_sizes?, how_it_works, faq[], closing, attribute_vocabulary }`; semantic `listing.attribute_intent { style/audience/occasion/color/materials descriptors }`; `listing.image_spec[≥4]`; `listing.shop_section_suggestion`; `listing.competitive_landscape`. Legacy `description_angles` kept for backward compat with v1 briefs.
