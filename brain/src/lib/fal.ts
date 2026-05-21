@@ -205,8 +205,8 @@ export function buildAutoOutputPath(
   const slug = (prompt || 'image')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 40) || 'image';
+    .slice(0, 40)
+    .replace(/^-+|-+$/g, '') || 'image';
   const idx = String(index).padStart(2, '0');
   return path.join('dist', 'gen', `${ts}-${slug}-${idx}.${ext}`);
 }
