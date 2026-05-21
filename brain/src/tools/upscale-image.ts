@@ -32,6 +32,7 @@ import {
   verifyAndCorrectDimensions,
   buildUpscaleOutputPath,
   estimateClarityUpscaleCost,
+  formatFalValidationError,
 } from '../lib/fal.js';
 import { log } from '../lib/log.js';
 
@@ -71,7 +72,7 @@ export interface UpscaleImageOptions {
 
   /** 0-1. Lower = less reinterpretation. Default: 0.1 (Clarity default: 0.35). */
   creativity?: number;
-  /** 0-3. Higher = locks harder to source. Default: 1.5 (Clarity default: 0.6). */
+  /** 0-1. Higher = locks harder to source. Default: 1.0 (Clarity default: 0.6). */
   resemblance?: number;
   /** CFG. Default: 4 (matches Clarity default). */
   guidanceScale?: number;
@@ -121,7 +122,7 @@ const DEFAULT_PROMPT = 'masterpiece, best quality, highres, sharp, detailed';
 const DEFAULT_NEGATIVE_PROMPT =
   'blurry, low resolution, pixelated, compression artifacts, noisy, grainy';
 const DEFAULT_CREATIVITY = 0.1;
-const DEFAULT_RESEMBLANCE = 1.5;
+const DEFAULT_RESEMBLANCE = 1.0;
 const DEFAULT_GUIDANCE_SCALE = 4;
 const DEFAULT_NUM_INFERENCE_STEPS = 20;
 const DEFAULT_SCALE = 2;
@@ -361,7 +362,7 @@ function usage(): never {
   console.error('');
   console.error('Faithful-upscale defaults (override only when you want detail enhancement):');
   console.error('  --creativity=N            0-1, default 0.1  (Clarity default: 0.35)');
-  console.error('  --resemblance=N           0-3, default 1.5  (Clarity default: 0.6)');
+  console.error('  --resemblance=N           0-1, default 1.0  (Clarity default: 0.6)');
   console.error('  --inference-steps=N       default 20        (Clarity default: 18)');
   console.error('  --guidance-scale=N        default 4');
   console.error('  --prompt="..."            default: "masterpiece, best quality, highres, sharp, detailed"');
@@ -429,7 +430,8 @@ const isEntryPoint =
 
 if (isEntryPoint) {
   main().catch(async (err: unknown) => {
-    const message = err instanceof Error ? err.message : String(err);
+    const falMsg = formatFalValidationError(err);
+    const message = falMsg ?? (err instanceof Error ? err.message : String(err));
     console.error('');
     console.error(`✗ upscale-image failed: ${message}`);
     await log({

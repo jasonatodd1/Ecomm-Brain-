@@ -29,6 +29,7 @@ import {
   buildAutoOutputPath,
   indexOutputPath,
   estimateFluxProCost,
+  formatFalValidationError,
 } from '../lib/fal.js';
 import { log } from '../lib/log.js';
 import { mapWithLimit } from '../lib/concurrency.js';
@@ -433,7 +434,8 @@ const isEntryPoint =
 
 if (isEntryPoint) {
   main().catch(async (err: unknown) => {
-    const message = err instanceof Error ? err.message : String(err);
+    const falMsg = formatFalValidationError(err);
+    const message = falMsg ?? (err instanceof Error ? err.message : String(err));
     console.error('');
     console.error(`✗ generate-image failed: ${message}`);
     await log({

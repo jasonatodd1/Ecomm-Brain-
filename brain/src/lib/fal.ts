@@ -254,3 +254,40 @@ export function indexOutputPath(
   const idx = String(index).padStart(2, '0');
   return path.join(parsed.dir, `${parsed.name}-${idx}${parsed.ext}`);
 }
+
+// ---------------------------------------------------------------------------
+// Error formatting
+// ---------------------------------------------------------------------------
+/**
+ * When fal returns a 422 ValidationError, the SDK surfaces it as an Error with
+ * only a generic `.message = 'Unprocessable Entity'`. The real reason lives in
+ * `err.body.detail[]` as an array of `{ loc, msg, input }` entries.
+ *
+ * This helper extracts those details and formats one line per offending field.
+ * Returns null when the error is not a fal validation error, so callers can
+ * fall back to `err.message`.
+ *
+ * Example output:
+ *   fal validation error — body.resemblance: Input should be less than or equal to 1 (got: 1.5)
+ */
+export function formatFalValidationError(err: unknown): string | null {
+  if (!err || typeof err !== 'object') return null;
+  const body = (err as { body?: unknown }).body;
+  if (!body || typeof body !== 'object') return null;
+  const detail = (body as { detail?: unknown }).detail;
+  if (!Array.isArray(detail) || detail.length === 0) return null;
+
+  const lines = detail.map((d) => {
+    const entry = d as { loc?: unknown[]; msg?: string; input?: unknown };
+    const fieldPath = Array.isArray(entry.loc) ? entry.loc.join('.') : '(unknown)';
+    const msg = typeof entry.msg === 'string' ? entry.msg : 'invalid';
+    let inputStr: string;
+    try {
+      inputStr = JSON.stringify(entry.input);
+    } catch {
+      inputStr = String(entry.input);
+    }
+    return `fal validation error — ${fieldPath}: ${msg} (got: ${inputStr})`;
+  });
+  return lines.join('\n');
+}
