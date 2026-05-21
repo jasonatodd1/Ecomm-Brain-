@@ -2,7 +2,7 @@
 
 > Paste this entire document into a fresh Claude conversation to pick up where the previous one left off. Verify-flagged items (`[VERIFY]`) are values the AI could not confirm from code/Supabase alone and should be re-checked by the operator.
 
-Last updated: 2026-05-20 (Wed). Reflects state after commit `21bbf8f` (`fix: add root node_modules/ to gitignore`).
+Last updated: 2026-05-21 (Thu). Reflects state after commit `3c98373` (`chore: untrack node_modules/.package-lock.json`).
 
 ---
 
@@ -45,7 +45,7 @@ We are currently at the **Product → List** stage for the first two products. T
 
 ### Data
 - **Supabase** (Postgres + RLS). 11 tables in `public`:
-  - `signals` (553 rows) — raw collector output
+  - `signals` (619 rows) — raw collector output
   - `opportunities` (11) — scored signals
   - `decisions_needed` (2) — surfaced for agent action; both `brief_ready`
   - `product_briefs` (5) — Research Agent output
@@ -53,8 +53,8 @@ We are currently at the **Product → List** stage for the first two products. T
   - `niche_memory` (22) — learnings keyed by `niche_tag` (`planneraddicts`: 17, `general`: 5)
   - `agent_config` (0) — tunable params per agent (no rows seeded yet; presence-only read in Research Agent)
   - `agent_runs` (7) — every agent execution with cost/status/timings
-  - `activity` (244) — chronological event log
-  - `cost_log` (1) — spend tracking (under-utilized; LLM costs currently logged as `cost.api_call` activity events, not aggregated to this table — see TODO)
+  - `activity` (256) — chronological event log; now includes `image.generated` / `image.upscaled` rows from the fal tools
+  - `cost_log` (1) — spend tracking (under-utilized; LLM and image costs currently logged as `cost.api_call` / image-tool activity events, not aggregated to this table — see TODO)
   - `system_state` (3) — global caps/flags/mode
 - **RLS:** enabled on 8 tables; **disabled** on `agent_config`, `agent_runs`, `product_briefs` (these are server-write-only, but Supabase advisor flags this — open security item if anon key ever gets exposed)
 
@@ -71,9 +71,10 @@ We are currently at the **Product → List** stage for the first two products. T
 ### Key libraries
 - `@anthropic-ai/sdk` ^0.96.0
 - `@supabase/supabase-js` ^2.45.4
+- `@fal-ai/client` ^2.x (image generation + upscaling — added 2026-05-21)
 - `dotenv` ^16.4.5
-- `puppeteer` ^25.0.4 (PDF + PNG rendering)
-- `sharp` ^0.34.5 (print-size variant generation)
+- `puppeteer` ^25.0.4 (PDF + PNG/JPEG rendering)
+- `sharp` ^0.34.5 (print-size variant generation + dimension verification/correction in the fal pipeline)
 - `tsx` ^4.19.1
 - `typescript` ^5.6.2
 
@@ -81,11 +82,14 @@ We are currently at the **Product → List** stage for the first two products. T
 - **Claude Opus 4.7** (`claude-opus-4-7`) — Research Agent keyword extraction + brief synthesis. ~$0.25 per research run.
 - **Claude Haiku 4.5** — Reddit intent classification (`src/lib/classify-intent.ts`). ~$0.001 per classification.
 - **Claude Sonnet 4.6** — reserved for future "routine work" per PRINCIPLES.md, not yet used in code.
+- **FLUX.2 Pro** (`fal-ai/flux-2-pro`, `fal-ai/flux-2-pro/edit`) — text-to-image and image-to-image (multi-reference, up to 9 refs). ~$0.075 for a 1728×2304 image (4MP). Used by `src/tools/generate-image.ts`.
+- **Clarity Upscaler** (`fal-ai/clarity-upscaler`) — diffusion-based upscaler with faithful-upscale tuning baked in (`creativity=0.1`, `resemblance=1.0`). ~$0.10 per upscale (compute-time billed, placeholder estimate). Used by `src/tools/upscale-image.ts`. Fallback for pixel-faithful: `fal-ai/aura-sr` (deterministic GAN, fixed 4x).
 
 ### External APIs
 - **SerpApi** — Google Trends collector. 9 working seed keywords (1 dead).
 - **Reddit** OAuth — collector for 7 subreddits.
 - **Etsy Open API v3** — public listing search + shop enrichment. Auth: `x-api-key: ${KEYSTRING}:${SHARED_SECRET}` (Feb 9, 2026 format change). Etsy Developer App `HillwardStudio Internal` is approved.
+- **fal.ai** — hosted FLUX.2 Pro + Clarity Upscaler. Auth via `FAL_KEY` env var. Per-call cost; no monthly fee.
 
 ### Environment variables (`.env.local` + Railway Variables)
 
@@ -96,9 +100,10 @@ SERPAPI_KEY=
 ANTHROPIC_API_KEY=
 ETSY_API_KEYSTRING=
 ETSY_SHARED_SECRET=
+FAL_KEY=
 ```
 
-All six are required by at least one job; missing vars throw at module load with a clear error.
+All seven are required by at least one job; missing vars throw at module load with a clear error. **NB:** `FAL_KEY` not yet added to Railway Variables (verify before any deployed job tries to import `src/lib/fal.ts`).
 
 ### MCPs connected in Cursor
 - Supabase (read + execute SQL)
@@ -128,12 +133,15 @@ Root: `brain/`. All paths below are relative to that.
 
 ### `src/tools/`
 - **`resize-print-variants.ts`** — `npm run resize:print <input.png> [output-dir]`. Reads a 5008×6680 master PNG and produces five print-size JPGs (`HillwardStudio-BunnyPrint-{8x10,11x14,16x20,18x24,24x36}.jpg`) via `sharp.extract` with per-size crop coordinates baked into a `VARIANTS` array. Validates input dimensions; fails loud if master is too small. JPEG quality 80.
+- **`generate-image.ts`** — `npm run gen -- --prompt="..." [options]`. Dual-mode: CLI for human iteration, or `import { generateImage }` for future agents. Routes to FLUX.2 Pro text-to-image by default, or `flux-pro-edit` (image-to-image, multi-reference, up to 9 refs) when `--ref` is passed. Explicit `--size=WxH` is pinned via sharp post-correction (throws if drift > 1.5×). Auto-named outputs land under `dist/gen/<ts>-<slug>-NN.png`; `--count=N` runs N parallel variants with `seed, seed+1, …`. Every successful run writes an `activity` row with `agent='product'`, `action='image.generated'`, and rich jsonb metadata (model, prompt, fal request ID, dims, seeds, costs, optional `product_brief_id` linkage). Verbose fal `ValidationError` body is surfaced (no more silent `"Unprocessable Entity"`).
+- **`upscale-image.ts`** — `npm run upscale -- --input=<path|url> [options]`. Same dual-mode pattern: CLI or `import { upscaleImage }`. Defaults to Clarity Upscaler with faithful-upscale tuning (`creativity=0.1`, `resemblance=1.0`, conservative against Clarity's defaults of 0.35/0.6). Accepts `--scale=N` or `--size=WxH` (size requires local input so dims can be read; computes scale + sharp-corrects to exact target). Smoke-tested 2026-05-21: 1728×2304 bunny → 5008×6680 in 70s, $0.10. Activity row written under `action='image.upscaled'` with input/output dims, factor, fal request ID, params, cost.
 
-No `generate-image.ts` yet — image generation (fal.ai / Recraft / Ideogram / Flux) is on the future roadmap.
+### `src/lib/` (continued — fal infra)
+- **`fal.ts`** — shared fal.ai infrastructure consumed by both tools above AND by future agents. Exports: configured `fal` client (auths via `FAL_KEY`), `MODEL_ALIASES` map (`flux-pro` → `fal-ai/flux-2-pro`, `flux-pro-edit` → `…/edit`, `clarity` → `fal-ai/clarity-upscaler`) with `resolveModelId(aliasOrId)` passthrough, `estimateFluxProCost(w,h)` / `estimateClarityUpscaleCost()` for budgeting, `resolveReferenceImage(ref)` (uploads local paths to fal CDN, passes URLs through), `downloadImage(url, path)`, `verifyAndCorrectDimensions(path, w, h, {upscaleThreshold=1.5})` (Layer 2/3 dimension guarantee: silent sharp correction for small mismatches, throw for >1.5× drift), `buildAutoOutputPath(prompt, index, ext)` / `buildUpscaleOutputPath(inputPath, scale, ext)` / `indexOutputPath(base, index, total)` for naming, `formatFalValidationError(err)` (extracts `err.body.detail[]` into one human-readable line per offending field). Throws at module load if `FAL_KEY` is missing.
 
 ### `src/render/`
 - **`planner.ts`** — `npm run render:planner`. Headless Puppeteer renders `products/hillward-a5-monthly/template/index.html` to `dist/planner-v1.pdf` at A5 with `preferCSSPageSize`. Waits for `document.fonts.ready` so Google Fonts (`Inter`) embed correctly. Creates `dist/` if missing (gitignored).
-- **`render-graphic.ts`** — `npm run render:graphic <input.html> <output.png>`. Generic PNG/JPEG screenshot tool for listing assets. Used for the bunny "What's Included" graphic at 2000×2000.
+- **`render-graphic.ts`** — `npm run render:graphic <input.html> <output.{png,jpg}>`. Generic screenshot tool for listing assets. Output format is inferred from the file extension: `.jpg`/`.jpeg` → JPEG quality 92, anything else → PNG. Used for the bunny "What's Included" graphic at 2000×2000.
 
 ### `src/lib/`
 - **`supabase.ts`** — `service_role` Supabase client. Loads `.env.local` at import time; throws on missing creds. `auth.persistSession: false`. Server-side only.
@@ -165,15 +173,15 @@ No `generate-image.ts` yet — image generation (fal.ai / Recraft / Ideogram / F
 | Discovery — Reddit collector | **Built + autonomous** | OAuth + intent classifier wired. |
 | Scoring | **Built, MVP validated** | Known scoring-formula ceiling issues — see open data-quality bugs in §7. |
 | Research Agent V1 | **Built + validated** | 5 briefs produced across 2 niches (planneraddicts, general/nursery wall art). Closed-loop with `niche_memory` verified: 4 opportunity gaps from brief v1 were re-confirmed in v2 (`evidence_count=2`). Synthesis prompt has been through tuning pass 1. |
-| Design Agent | **Not built** | Current products are designed manually in HTML/CSS by Claude in-chat, with operator review. Future: Recraft/Ideogram/Flux orchestration. |
+| Design Agent | **Infra built, agent not yet built** | The image-generation primitives a Design Agent would call now exist and are validated end-to-end (FLUX.2 Pro text-to-image, FLUX.2 Pro edit for image-to-image, Clarity Upscaler for print-resolution enlargement). Both tools are dual-mode — usable as CLI today (`npm run gen`, `npm run upscale`) and importable as `generateImage(opts)` / `upscaleImage(opts)` from an agent tomorrow. Smoke-tested: a 1728×2304 watercolor bunny was generated via FLUX.2 Pro and upscaled to 5008×6680 (print-master size) via Clarity, with the activity log already storing all metadata downstream agents would need. HTML/CSS layouts (planner, listing graphics) are still designed manually in-chat. |
 | Listing Agent | **Not built** | Etsy publish is currently fully manual. Brief → listing copy/photos/tags will be the next pipeline stage once a product is published manually and feedback patterns are observed. |
 | Customer Service | **Not built** | Blocked on first sale. |
 | Optimization | **Not built** | Blocked on having performance data. |
 | Orchestrator (cron) | **Not built** | Currently every job is git-push-driven (Railway redeploys on commit and runs `npm start`). Cron scheduling is on the backlog until the scoring engine is fully trusted. |
 
-**What's validated end-to-end:** Signal collection → scoring → opportunity surfacing → research brief. Outputs are reproducible, audited (`agent_runs`), and cost-tracked.
+**What's validated end-to-end:** Signal collection → scoring → opportunity surfacing → research brief → image generation → image upscale-to-print. Outputs are reproducible, audited (`agent_runs` + `activity`), and cost-tracked.
 
-**What's next:** ship the first product (A5 planner or nursery print — order TBD), publish it manually, observe Etsy-side feedback signals, then design the Listing Agent against real data.
+**What's next:** ship the first product (nursery print is now the easier candidate — fal-generated bunny exists at print resolution, ready for the `resize:print` pipeline; planner needs final PDF render). Publish manually, observe Etsy-side feedback signals, then design the Listing Agent against real data.
 
 ---
 
@@ -182,7 +190,7 @@ No `generate-image.ts` yet — image generation (fal.ai / Recraft / Ideogram / F
 1. **Closed-loop architecture over pipeline architecture.** Every agent reads `niche_memory` before acting and writes learnings back. Avoids re-discovering the same insights every run. See PRINCIPLES principle #1.
 2. **Best tool for the job, not the cheapest.** Opus 4.7 for synthesis (~$0.20/run × 5 runs so far ≈ $1) is far cheaper than the cost of a bad brief that leads to a bad product. Haiku 4.5 only for routine classification. See PRINCIPLES principle #6.
 3. **All Etsy market stats computed in code, not by the LLM.** `aggregates.ts` computes medians and percentiles deterministically. The LLM's `market_summary` numbers are reconciled (drift logged, computed values always win). LLMs are unreliable at arithmetic over JSON arrays.
-4. **Code-based PDF rendering via Puppeteer + HTML/CSS.** No paid design tools or PDF libraries. HTML is the design language Claude knows best; CSS `@page` + `preferCSSPageSize` handles A5/Letter trivially. Reuses the same renderer for listing graphics (PNG screenshots).
+4. **Code-based PDF + listing-graphic rendering via Puppeteer + HTML/CSS; AI image generation via fal.ai (FLUX.2 Pro + Clarity).** Two complementary asset pipelines: structured/typographic work (planners, listing graphics) stays in Puppeteer-rendered HTML/CSS because HTML is the design language Claude is strongest in. Illustrative/photographic work (nursery prints, lifestyle mockups) goes through fal.ai because diffusion models are categorically better at it than CSS. Both pipelines write into `dist/gen/` (gitignored) and log to `activity` so downstream agents can locate generated assets uniformly. fal-side defaults are tuned for *faithful* output (Clarity `creativity=0.1`, `resemblance=1.0`) — the system can override when it wants creative reinterpretation; the floor is conservative.
 5. **Volume pricing ($3.49 planner, $4.49 nursery print) over premium pricing.** Direct trade-off vs the 0-review reputation deficit. We can't win on social proof, so we win on price-per-value at a sustainable margin. Each brief explicitly cites comparable competitors before locking pricing.
 6. **MVP scoping default for first-in-niche products.** A5 planner shipped as 28 pages, A5 only, undated — not 80 pages with 4 sizes and dated 2026/2027. Reduces design surface, exposes real demand signal faster. Expansion (sizes, dated, bundles) is a v2 candidate listed in the brief.
 7. **Single-shop, single-marketplace first.** HillwardStudio on Etsy only. Shopify, Pinterest, TikTok all deferred until Etsy is throwing off enough revenue to justify them.
@@ -256,27 +264,33 @@ Canonical doc: `brain/PRINCIPLES.md`. Summary of the 10 core architectural princ
 ## 9. KNOWN ISSUES
 
 ### Fixed (recently)
+- **`node_modules/.package-lock.json` still tracked in git** — left over from before `node_modules/` was gitignored. Untracked in commit `3c98373` ("chore: untrack node_modules/.package-lock.json"). File remains on disk; just no longer noisy in `git status`.
+- **Clarity `resemblance` range was outdated in `upscale-image.ts` defaults** — file's docstring claimed `0–3`, but fal's current Clarity schema requires `≤ 1`. Default `1.5` caused 422 on first smoke test. Fixed in commit `519bca0`: default lowered to `1.0`, docstring + CLI help corrected. Same commit also introduces `formatFalValidationError` (shared helper) so all fal `ValidationError` 422s now surface `err.body.detail[]` instead of a generic `"Unprocessable Entity"`.
+- **`buildAutoOutputPath` produced double-hyphen filenames** when the 40-char slug slice landed mid-word. Fixed in commit `0d1b419` (trim trailing hyphens after slicing). Existing file `2026-05-21-1255-vintage-watercolor-bunny-scalloped-oval--01.png` predates the fix and keeps its name.
 - **Railway `node_modules` warning** — root `node_modules/` was being included in Railway build context. Fixed in commit `21bbf8f` ("add root node_modules/ to gitignore"). Now `node_modules/` and `brain/node_modules/` are both ignored at the repo root.
 - **Postgres jsonb rejection on wall-art listings** — Etsy returned raw NUL bytes / control chars in some `description` fields, causing `signals.metadata` inserts to fail with `Empty or invalid json`. Fixed via `sanitizeForJsonb` in `brain/src/lib/etsy-search.ts` (commit `1859387`).
 - **Etsy v3 auth format** — `x-api-key` had to switch from `keystring` to `keystring:shared_secret` per Etsy's Feb 9, 2026 change. Fixed in commit `465690d`.
 
 ### Open
+- **`FAL_KEY` not yet in Railway Variables.** Only in local `.env.local`. Any deployed job that imports `src/lib/fal.ts` will fail at module-load until this is added. Doesn't affect current cron-less, manual-only deploys, but worth knowing before any agent or job starts depending on fal-side work.
 - **RLS disabled on 3 tables** — `agent_config`, `agent_runs`, `product_briefs`. Server-write-only by current design, but flagged by Supabase advisor. Not a live exposure unless the anon key ever leaks. Decision deferred until dashboard work begins.
 - **All data-quality bugs** listed in §7.
 - **Scoring formula ceiling saturation** at confidence 1.000 — lost discrimination at the top of the funnel.
 - **`agent_config` table is empty.** Research Agent reads it for presence-only; no tunable params are actually externalized yet. First real config row should appear when prompts move out of source.
+- **Clarity Upscaler is diffusion-based**, so even at faithful tuning (`creativity=0.1`, `resemblance=1.0`) it can introduce small detail drift on fine illustrations. For pixel-faithful upscaling of clean line/vector-style art, fall back to `--model=fal-ai/aura-sr` (deterministic GAN, fixed 4x). Documented in `upscale-image.ts` docstring; not yet smoke-tested.
+- **Other Clarity parameter ranges have not been independently re-verified** against the current fal schema. `creativity` (0.1), `guidance_scale` (4), `num_inference_steps` (20) all passed the recent smoke test, but a stricter combo could reveal more drift from the docstring. Worth cross-checking when next touching that file.
 
 ---
 
 ## 10. NEXT SESSION PRIORITIES
 
-Based on the current state (two proceed-recommended briefs, zero live listings, design + listing agents not built), the top three things to do when conversation resumes:
+Based on the current state (two proceed-recommended briefs, zero live listings, image-generation infra validated end-to-end, design + listing agents not yet built), the top three things to do when conversation resumes:
 
-1. **Publish the first listing.** Pick one product (recommendation: A5 monthly planner, since the template is further along and the brief confidence is higher at 0.72). Render the PDF (`npm run render:planner`), generate listing photos manually (or via fal.ai if quick), and publish to Etsy by hand. Insert the resulting Etsy listing into the `listings` table so downstream agents have something to read.
-2. **Author the second product's listing inputs in parallel.** Bunny print already has master image, 5 print-size variants, and a "What's Included" graphic. Needs: listing title (use `brief.listing.title_template`), description (use `description_angles`), tags (use `etsy_tags`), main hero photo, and pricing per `brief.pricing.recommended` ($4.49).
-3. **Decide whether to start scaffolding the Listing Agent now or wait for first-sale signal.** Per principle #7 ("build, validate, automate"), the manual listing should run end-to-end at least once before automating. Recommendation: ship both products manually, observe Etsy's behavior (search rank, favorites, conversion), then design the Listing Agent against that ground truth.
+1. **Ship the nursery bunny listing first.** Image generation now produces print-ready assets (5008×6680 PNG at `brain/dist/gen/2026-05-21-1324-...-upscaled-2.9x.png`). Next concrete steps: (a) eyeball the upscale for visual fidelity — if it looks right, run it through `npm run resize:print` to produce the 5 print-size JPGs the brief calls for; if not, iterate prompt + regenerate (`--count=4` to triage variants for $0.30); (b) author listing copy from the brief (`title_template`, `description_angles`, `etsy_tags`); (c) shoot a hero "lifestyle on wall" graphic — try `npm run gen -- --ref=...bunny... --prompt="print framed on nursery wall, soft natural light, sage and cream interior"`; (d) publish to Etsy manually at $4.49 (brief `pricing.recommended`); (e) insert the resulting Etsy listing into the `listings` table so downstream agents have something to read.
+2. **Finalize and ship the A5 planner.** Template authored (v3 with SVG dot grid, editorial cover); next: run `npm run render:planner` to produce the actual PDF, eyeball it page-by-page (cover, monthly spreads, notes pages, font embedding), iterate on `index.html` until production-ready, then generate listing photos (likely via `npm run gen --ref=<pdf-page-screenshot>` for a "planner-on-desk" mockup), publish at $3.49 (brief recommendation), record in `listings`. Brief confidence is 0.72 — second-highest in the current pipeline.
+3. **Decide whether to start scaffolding the Listing Agent now or wait for first-sale signal.** Per principle #7 ("build, validate, automate"), the manual publish flow should run end-to-end at least once before automating. Recommendation: ship both products manually, observe Etsy's behavior (search rank, favorites, conversion), then design the Listing Agent against that ground truth — both `generateImage` and `upscaleImage` are already importable for it.
 
-Secondary, if time allows: knock out the three data-quality bugs in §7 — they're blocking trustworthy scoring re-runs.
+Secondary, if time allows: knock out the three data-quality bugs in §7 — they're blocking trustworthy scoring re-runs. Also: add `FAL_KEY` to Railway Variables before any deployed code path imports `src/lib/fal.ts`.
 
 ---
 
