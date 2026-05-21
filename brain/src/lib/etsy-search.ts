@@ -30,6 +30,8 @@ const ETSY_HEADERS = {
 
 const LISTINGS_ACTIVE_ENDPOINT =
   'https://openapi.etsy.com/v3/application/listings/active';
+const LISTINGS_ENDPOINT_BASE =
+  'https://openapi.etsy.com/v3/application/listings';
 const SHOPS_ENDPOINT_BASE = 'https://openapi.etsy.com/v3/application/shops';
 
 const DEFAULT_LIMIT = 25;
@@ -313,5 +315,178 @@ export async function getShop(shopId: number): Promise<EtsyShopInfo | null> {
     review_count: typeof data.review_count === 'number' ? data.review_count : 0,
     review_average:
       typeof data.review_average === 'number' ? data.review_average : 0
+  };
+}
+
+// ---------------------------------------------------------------------------
+// getListing — fetch a single listing's current state.
+// Used by monitor-listings.ts for daily snapshots of OUR listings, but
+// works for any public listing_id. Returns both a normalized struct and the
+// full raw Etsy response so listings_stats can store the latter for
+// future-proofing (new fields become queryable from history without re-fetch).
+// ---------------------------------------------------------------------------
+export interface EtsyListingDetails {
+  listing_id: number;
+  shop_id: number | null;
+  state: string | null;
+  title: string;
+  url: string;
+  description: string;
+  tags: string[];
+  views: number | null;
+  num_favorers: number | null;
+  price_cents: number | null;
+  currency_code: string | null;
+  /** Etsy returns seconds-since-epoch; null if absent. */
+  last_modified_timestamp: number | null;
+  /** Full Etsy response, sanitized for jsonb. */
+  raw: Record<string, unknown>;
+}
+
+interface EtsyListingDetailsResponse extends EtsyListing {
+  state?: string;
+  views?: number;
+  tags?: unknown;
+  last_modified_timestamp?: number;
+  error?: string;
+}
+
+// Recursively strip NUL/control bytes from any string value in a nested
+// object/array so the full raw response is safe to insert into jsonb.
+// Mirrors sanitizeForJsonb but walks the whole tree.
+function sanitizeDeep(value: unknown): unknown {
+  if (typeof value === 'string') return sanitizeForJsonb(value);
+  if (Array.isArray(value)) return value.map(sanitizeDeep);
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = sanitizeDeep(v);
+    }
+    return out;
+  }
+  return value;
+}
+
+function priceToCents(price?: EtsyPrice): number | null {
+  if (!price) return null;
+  if (typeof price.amount !== 'number' || typeof price.divisor !== 'number') {
+    return null;
+  }
+  if (price.divisor === 0) return null;
+  // Etsy's amount/divisor representation: e.g. {amount: 349, divisor: 100} = $3.49.
+  // To get cents reliably regardless of divisor, normalize to dollars then × 100.
+  return Math.round((price.amount / price.divisor) * 100);
+}
+
+export async function getListing(
+  listingId: number
+): Promise<EtsyListingDetails | null> {
+  if (!Number.isInteger(listingId) || listingId <= 0) return null;
+
+  const url = `${LISTINGS_ENDPOINT_BASE}/${listingId}`;
+
+  let res: Response;
+  try {
+    res = await fetch(url, { headers: ETSY_HEADERS });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await log({
+      agent: 'listing',
+      action: 'etsy_listing_fetch.failed',
+      description: `Network error fetching listing ${listingId}`,
+      severity: 'warning',
+      metadata: { listing_id: listingId, error: msg }
+    });
+    return null;
+  }
+
+  if (!res.ok) {
+    const bodyText = await res.text().catch(() => '<unreadable>');
+    const retryAfter = res.headers.get('retry-after');
+    const meta: Record<string, unknown> = {
+      listing_id: listingId,
+      status_code: res.status,
+      response_body: bodyText.slice(0, 500)
+    };
+    if (res.status === 429 && retryAfter) {
+      meta['retry_after_seconds'] = retryAfter;
+    }
+    await log({
+      agent: 'listing',
+      action: 'etsy_listing_fetch.failed',
+      description: `Etsy listing fetch returned HTTP ${res.status} for ${listingId}`,
+      severity: 'warning',
+      metadata: meta
+    });
+    return null;
+  }
+
+  let data: EtsyListingDetailsResponse;
+  try {
+    data = (await res.json()) as EtsyListingDetailsResponse;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await log({
+      agent: 'listing',
+      action: 'etsy_listing_fetch.failed',
+      description: `Failed to parse Etsy listing JSON for ${listingId}`,
+      severity: 'warning',
+      metadata: { listing_id: listingId, error: msg }
+    });
+    return null;
+  }
+
+  if (data.error) {
+    await log({
+      agent: 'listing',
+      action: 'etsy_listing_fetch.failed',
+      description: `Etsy API error for listing ${listingId}`,
+      severity: 'warning',
+      metadata: { listing_id: listingId, etsy_error: data.error }
+    });
+    return null;
+  }
+
+  await log({
+    agent: 'listing',
+    action: 'cost.api_call',
+    description: `Etsy API listing ${listingId}`,
+    metadata: {
+      provider: 'etsy_api',
+      engine: 'listing_fetch',
+      estimated_cost_usd: 0
+    }
+  });
+
+  const tagsRaw = data.tags;
+  const tags: string[] = Array.isArray(tagsRaw)
+    ? tagsRaw
+        .filter((t): t is string => typeof t === 'string')
+        .map(t => sanitizeForJsonb(t))
+    : [];
+
+  return {
+    listing_id: typeof data.listing_id === 'number' ? data.listing_id : listingId,
+    shop_id: typeof data.shop_id === 'number' ? data.shop_id : null,
+    state: typeof data.state === 'string' ? data.state : null,
+    title: sanitizeForJsonb(typeof data.title === 'string' ? data.title : ''),
+    url: sanitizeForJsonb(typeof data.url === 'string' ? data.url : ''),
+    description: sanitizeForJsonb(
+      typeof data.description === 'string' ? data.description : ''
+    ),
+    tags,
+    views: typeof data.views === 'number' ? data.views : null,
+    num_favorers:
+      typeof data.num_favorers === 'number' ? data.num_favorers : null,
+    price_cents: priceToCents(data.price),
+    currency_code:
+      typeof data.price?.currency_code === 'string'
+        ? sanitizeForJsonb(data.price.currency_code)
+        : null,
+    last_modified_timestamp:
+      typeof data.last_modified_timestamp === 'number'
+        ? data.last_modified_timestamp
+        : null,
+    raw: sanitizeDeep(data) as Record<string, unknown>
   };
 }
