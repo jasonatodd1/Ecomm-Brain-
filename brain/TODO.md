@@ -4,17 +4,20 @@
 
 ## Current Focus
 
-### Drive first sale (both listings live, daily monitor capturing baseline)
-- [ ] Run `npm run monitor:listings` daily by hand for 3–5 days before scheduling cron — confirms baseline behavior, surfaces edge cases (state changes, sold_out, tag edits, etc.) per principle #7
-- [ ] Add `FAL_KEY` to Railway Variables before any deployed code path imports `src/lib/fal.ts` (currently only in `.env.local`)
-- [ ] First sale (validation milestone) — both listings active, awaiting market signal
-
-## Data-Quality Bugs (open)
+### Fix the 3 data-quality bugs (closes the discovery-pipeline loop before Listing Agent build)
 - [ ] `opportunities.niche` field is null on every row — likely scoring engine omission
 - [ ] `opportunities.source_count` stuck at 1 across all rows — scoring engine doesn't aggregate signals across collection runs (re-confirmation should bump this)
 - [ ] Reddit `post_url` missing from `signals.metadata` — only lives on the opportunity row, breaks signal→opportunity traceability for Reddit signals
 
+### Drive first sale (both listings live, daily monitor capturing baseline)
+- [ ] Run `npm run monitor:listings` daily by hand for 3–5 days before scheduling cron — confirms baseline behavior, surfaces edge cases (state changes, sold_out, tag edits, etc.) per principle #7
+- [ ] First sale (validation milestone) — both listings active, awaiting market signal
+
+## Data-Quality Bugs (open)
+- _All three currently in Current Focus above; fix lands next._
+
 ## Backlog (committed, deferred)
+- [ ] **Asset pipeline gap (Listing Agent prerequisite).** v2 bunny brief claims deliverables that the current `resize-print-variants.ts` pipeline does NOT yet produce: master JPG at 300 DPI sized for all 5 print sizes (have JPGs but not packaged as one master + ratio guide), PDF with crop marks (not built), transparent PNG for layered/digital use (not built), 1-page print & ratio guide PDF (not built). Decide before the Listing Agent first publishes: either (a) expand `resize-print-variants.ts` + add `package-deliverables.ts` to produce the full claimed set, OR (b) constrain the brief schema (Research Agent's `whats_included`) to only claim files the pipeline produces today. Tracking item — no code action yet, but flag before Listing Agent ships.
 - [ ] Drop dead keywords from seed list (digital planner, printable wall art, custom invitation template); investigate or remove gratitude journal printable (SerpApi failure case)
 - [ ] `expense.ts` utility for programmatic cost logging (no more raw SQL inserts)
 - [ ] Per-provider cost caps with daily limits (runaway-spend guardrail)
@@ -31,23 +34,15 @@
 
 ## Future (after first sale validation)
 - [ ] Product creation agent (design generation via Recraft/Ideogram/Flux, PDF assembly)
-- [ ] **Competitive SEO Scoring engine** — full spec in `brain/COMPETITIVE_SEO_SCORING.md`. Shared library `brain/src/lib/etsy-seo-scoring.ts` consumed by BOTH Research Agent (supply-side gap discovery during market analysis) and Listing Agent (pre-publish quality gate + post-publish drift monitoring). Strategic edge: demand × (1/supply quality), not demand alone — turns the brain's market analysis into a competitive-gap detector instead of a demand-only signal.
-  - [ ] Add `brief.competitive_landscape` to `ProductBrief` schema with placeholder shape (top-3 incumbents per keyword) — see `COMPETITIVE_SEO_SCORING.md` §6 step 1. Ships as part of Tuning Pass 2.
-  - [ ] Implement `scoreEtsyListingSeo()` per `COMPETITIVE_SEO_SCORING.md` §2-§3 (10 rules, deterministic, no LLM, pure function). Either end-of-Tuning-Pass-2 or its own milestone before Listing Agent.
-  - [ ] Wire competitive scoring into research synthesis prompt — flag weak-incumbent gaps in `brief.reasoning` (§4).
-  - [ ] Score every `monitor-listings.ts` snapshot and surface week-over-week drift (§5).
-  - [ ] Add `etsy_seo_gap` as a new signal type — only when Listing Agent ships (§6 step 6).
-- [ ] **Listing Agent** — full spec in `brain/LISTING_AGENT_REQUIREMENTS.md`. Store-agnostic core + per-store adapters (Etsy first, Pinterest next, Shopify deferred). Replaces the old "Etsy listing automation" placeholder. Consumes the shared SEO scoring engine above as a downstream consumer per `LISTING_AGENT_REQUIREMENTS.md` §3.
+- [ ] **Competitive SEO Scoring engine — remaining work after v1.** v1 scorer + Research Agent integration shipped in the `tune research agent (pass 2)` commit (10 rules, deterministic, no LLM; per-keyword classification on every new brief). Two follow-ups remain — both gated on a Listing Agent existing:
+  - [ ] Score every `monitor-listings.ts` snapshot and surface week-over-week drift (`COMPETITIVE_SEO_SCORING.md` §5).
+  - [ ] Add `etsy_seo_gap` as a new signal type — only when Listing Agent ships and can act on the gap (`COMPETITIVE_SEO_SCORING.md` §6 step 6).
+- [ ] **Listing Agent** — full spec in `brain/LISTING_AGENT_REQUIREMENTS.md`. Store-agnostic core + per-store adapters (Etsy first, Pinterest next, Shopify deferred). Replaces the old "Etsy listing automation" placeholder. Consumes the shared SEO scoring engine (now built) as a downstream consumer per `LISTING_AGENT_REQUIREMENTS.md` §3. Remaining prerequisites:
   - [ ] Migration `0007_assets.sql` — new `assets` table (kind/listing_id/product_brief_id/dimensions/source/cdn_url/fal_request_id). Listing Agent prerequisite per §6 of the spec.
   - [ ] `gen` + `upscale` tools UPSERT into `assets` in addition to `activity` (per §6).
   - [ ] `npm run link:asset` CLI for backfilling assets generated outside the system — bunny + planner pre-date the gen tool and need linking before the agent ships (per §6).
-  - [ ] Research Agent **Tuning Pass 2** — schema changes that must ship before the Listing Agent can be built (per `LISTING_AGENT_REQUIREMENTS.md` §7; also see `COMPETITIVE_SEO_SCORING.md` §6 for sequencing with the scoring engine):
-    - [ ] Promote `audience.persona` to first-class structured field
-    - [ ] Replace `listing.description_angles` with structured `listing.description = { hook, body_sections[], faq[], cta }`
-    - [ ] Replace `listing.etsy_attributes` with semantic `listing.attribute_intent = { style_descriptors, audience_descriptors, occasion_descriptors, color_descriptors, materials_intent }` — Research Agent never enumerates raw store values
-    - [ ] Add `listing.image_spec[]` — explicit slot manifest (hero / lifestyle / what's-included / size-grid / detail) with dims + style notes
-    - [ ] Add `listing.shop_section_suggestion` — single name string
-    - [ ] Add `listing.competitive_landscape` (per `COMPETITIVE_SEO_SCORING.md` §4) — bundled into Tuning Pass 2 so the schema + the scorer land together
+  - [ ] Asset pipeline gap (see Backlog) — decide expand-pipeline vs constrain-schema before first agent publish.
+  - _Research Agent Tuning Pass 2 prerequisite is DONE (shipped in the `tune research agent (pass 2)` commit)._
 - [ ] Dashboard on Vercel (Supabase Realtime)
 - [ ] Orchestrator (cadence-driven job scheduling instead of git-push-driven)
 - [ ] Proactive notifications (Telegram bot, daily email digest, weekly strategic brief)
@@ -56,6 +51,17 @@
 - [ ] Backup strategy for Supabase
 
 ## Done
+
+### Research Agent Tuning Pass 2 + Competitive SEO Scoring v1 (the `tune research agent (pass 2)` commit)
+- [x] **`ProductBrief` schema extended** (`brain/src/agents/research/types.ts`, `agent_version='research-v2'`): top-level `audience { persona, primary_search_intent, decision_factors }`; structured `listing.description { hook, why_this_one, whats_included, print_sizes?, how_it_works, faq[], closing, attribute_vocabulary }`; semantic `listing.attribute_intent { style/audience/occasion/color/materials descriptors }`; `listing.image_spec[≥4]`; `listing.shop_section_suggestion`; `listing.competitive_landscape`. Legacy `description_angles` kept for backward compat with v1 briefs.
+- [x] **Competitive SEO Scoring engine v1** (`brain/src/lib/etsy-seo-scoring.ts`): pure deterministic function, no DB / no LLM / no network. 10 v1 rules — 8 always evaluated (title_length, title_keyword_placement, tag_count, tag_quality, description_length, description_keyword_in_preview, description_scannable_structure, shop_section_assigned), 2 conditional (attribute_fill_rate needs taxonomy data, ai_disclosure_compliance needs signature detection — both skipped in v1 callers). Returns `{ total, max, percent, weak_areas, detailed_breakdown, version }`. `EtsyListingDetails` extended with `shop_section_id`.
+- [x] **Competitive landscape wiring** (`brain/src/agents/research/competitive.ts`): per-keyword scoring of top-10 incumbents (concurrency-limited Etsy fetches deduped across keywords), classification per spec (`open_field` if all <50% > `weak_incumbents` if 3+ <60% > `red_ocean` if 3+ ≥80% > `mixed`), gap_summary per keyword. Integrated into `src/agents/research/index.ts` as Step 6.6 between aggregates and synthesis. Brief-level `competitive_landscape` + per-keyword classifications recorded in `agent_runs.metadata`.
+- [x] **Synthesis prompt** (`brain/src/agents/research/prompts.ts`): new COMPETITIVE SEO LANDSCAPE input section, TUNING PASS 2 quality blocks for all 6 new schema fields, expanded output schema. `brief.reasoning` now required to cite a specific competitive_landscape figure as evidence for `differentiation_angle`. Generic shop closing line standardized across all v2 briefs (no per-product hardcoding). All Tuning Pass 1 improvements preserved (NEW SHOP CONTEXT, PRICING STRATEGY, MVP SCOPING, positive-framing titles, risk mitigations rules).
+- [x] **Renderer** (`brain/src/agents/research/render-markdown.ts`): operator markdown extended with Audience Persona, Listing Description (inline Etsy-plaintext preview in code block), Attribute Intent, Image Spec, Shop Section, and Competitive SEO Landscape sections. New sibling `renderBriefAsEtsyDescription` emits publish-ready plain text (ALL CAPS headers, dashes for bullets, "Q./A." FAQ formatting, fixed section order, gracefully skips optional `print_sizes`).
+- [x] **Validation re-runs**: planneraddicts (`eed67089`) → v2 brief `535b3e36` (proceed @ 0.72); nursery wall art (`2af0ba72`) → v2 brief `a70b9002` (proceed @ 0.72). Both produced sensible weak-incumbent classifications (spot-checked: Jesus portrait at 59% on "nursery wall art printable", neon sign at 46% on "baby room wall art", Pokéball sign at 29% on "nursery decor" — all genuinely off-topic for their keywords). Brief markdowns saved at `brain/briefs/2026-05-21-eed67089.md` and `brain/briefs/2026-05-21-2af0ba72.md` as worked-example evidence. Total cost $0.70.
+- [x] **`sanitizeForJsonb` extended to strip lone UTF-16 surrogates** (`brain/src/lib/etsy-search.ts`). First v2 synthesis insert failed Postgres with "Empty or invalid json" because `description_preview` slicing landed inside a surrogate pair on 3 search results where sellers used mathematical-bold unicode (𝑾𝒉𝒂𝒕 𝒊𝒔). Fix walks the string char-by-char dropping unpaired high/low surrogates. Also exported as `sanitizeJsonbDeep` for use on synthesized brief inserts in `src/agents/research/index.ts`.
+- [x] **Diagnostic `brief-attempt-*.json` dump on `save_brief` failure** (`src/agents/research/index.ts`). Writes the exact sanitized brief + raw_research that Supabase rejected to gitignored `brain/dist/` so future jsonb failures can be diagnosed without a $0.30 Opus re-run.
+- [x] **`FAL_KEY` added to Railway Variables.** Out of `.env.local`-only territory; deployed jobs can now safely import `src/lib/fal.ts` without module-load crashes.
 
 ### First Listings Live on Etsy (HillwardStudio)
 - [x] A5 Monthly Calendar Printable — `etsy_listing_id` 4508059444 — $3.49 — opportunity `c3fa0a4d…` (planneraddicts Reddit buyer)

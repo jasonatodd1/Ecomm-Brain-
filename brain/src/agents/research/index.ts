@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { supabase } from '../../lib/supabase.js';
 import { log } from '../../lib/log.js';
-import { searchEtsy } from '../../lib/etsy-search.js';
+import { searchEtsy, sanitizeJsonbDeep } from '../../lib/etsy-search.js';
 import { mapWithLimit } from '../../lib/concurrency.js';
 
 import {
@@ -13,6 +13,7 @@ import {
 } from './prompts.js';
 import { renderBriefAsMarkdown } from './render-markdown.js';
 import { computeAggregates, type MarketAggregates } from './aggregates.js';
+import { computeCompetitiveLandscape } from './competitive.js';
 import type {
   DecisionRecord,
   EtsySearchResult,
@@ -22,8 +23,11 @@ import type {
 
 const OPUS_MODEL = 'claude-opus-4-7';
 const KEYWORD_COST_USD = 0.05;
-const SYNTHESIS_COST_USD = 0.2;
-const AGENT_VERSION = 'research-v1';
+// Tuning Pass 2 enlarges synthesis output substantially: structured
+// listing.description, attribute_intent, image_spec, competitive_landscape.
+// Budget bumped from $0.20 (v1) to $0.30 (v2) to reflect the larger output.
+const SYNTHESIS_COST_USD = 0.3;
+const AGENT_VERSION = 'research-v2';
 
 let anthropicClient: Anthropic | null = null;
 function getAnthropic(): Anthropic {
@@ -176,12 +180,16 @@ export async function researchDecision(
       );
     }
 
-    // Step 6 — Search Etsy per keyword (rate-limited: 2 in-flight, 200ms stagger),
-    // deduplicate by listing_id/url.
+    // Step 6 — Search Etsy per keyword (rate-limited: 2 in-flight, 200ms stagger).
+    // Keep BOTH the per-keyword arrays (for competitive scoring in step 6.6) AND
+    // the global deduplicated list (for synthesis prompt + market aggregates).
     currentStep = 'search_etsy';
     const searchArrays = await mapWithLimit(keywords, 2, 200, k =>
       searchEtsy(k, { limit: 25 })
     );
+
+    const resultsByKeyword = new Map<string, EtsySearchResult[]>();
+    keywords.forEach((k, i) => resultsByKeyword.set(k, searchArrays[i] ?? []));
 
     const seen = new Set<string>();
     const searchResults: EtsySearchResult[] = [];
@@ -203,19 +211,35 @@ export async function researchDecision(
     // This step also fan-out fetches shop info for the top 5 sellers in parallel.
     const aggregates = await computeAggregates(searchResults);
 
+    // Step 6.6 — Competitive SEO scoring (Tuning Pass 2, COMPETITIVE_SEO_SCORING.md §4).
+    // For each keyword, score the top 10 incumbents and emit a structured
+    // landscape entry that synthesis cites as evidence for weak-incumbent gaps.
+    // Etsy listing fetches are free; ~30-50 unique listings per brief, ~20-30s at
+    // mapWithLimit(2, 200ms).
+    currentStep = 'competitive_landscape';
+    const competitive = await computeCompetitiveLandscape({
+      keywords,
+      resultsByKeyword,
+      topN: 10
+    });
+
     // Step 7 — Synthesize brief via Opus
     currentStep = 'synthesize_brief';
     const synthesisPrompt = buildSynthesisPrompt(
       decision,
       nicheMemory,
       searchResults,
-      aggregates
+      aggregates,
+      competitive.landscape
     );
     const synthesisResp = await anthropic.messages.create({
       model: OPUS_MODEL,
-      // 6000 leaves headroom for the full brief: 5 top_sellers with notable_features,
-      // 6-8 hex palette, etsy_tags, description_angles, risks. 4000 truncated at line 166.
-      max_tokens: 6000,
+      // Tuning Pass 2 brief is substantially larger than v1: adds structured
+      // listing.description (~700-900 output tokens), attribute_intent, image_spec
+      // (4+ entries), competitive_landscape (per-keyword incumbents), and the
+      // audience persona. Budget headroom at 12000 to be safe; observed actual
+      // ~6500-7500 output tokens per v2 brief.
+      max_tokens: 12000,
       messages: [{ role: 'user', content: synthesisPrompt }]
     });
     totalCostUsd += SYNTHESIS_COST_USD;
@@ -240,18 +264,41 @@ export async function researchDecision(
     await reconcileNumericDrift(brief, aggregates, decisionId);
 
     // Step 9 (numbering follows spec; markdown rendered after we know briefId)
-    // Save to product_briefs
+    // Save to product_briefs.
+    // sanitizeJsonbDeep guards the inserts against NUL/control bytes that
+    // Postgres jsonb rejects ("Empty or invalid json"). Two sources of risk:
+    // (1) LLM-synthesized strings sometimes contain stray control chars; and
+    // (2) raw_research carries decision context that originates from Reddit
+    // comments which historically have control chars from copy-paste tooling.
     currentStep = 'save_brief';
+    const sanitizedBrief = sanitizeJsonbDeep(brief) as Record<string, unknown>;
+    const sanitizedRawResearch = sanitizeJsonbDeep({
+      keywords,
+      search_results: searchResults,
+      decision_snapshot: decision
+    }) as Record<string, unknown>;
+
+    // Diagnostic dump (kept on disk under dist/ for any save_brief failure).
+    // Cheap insurance — gives the operator the exact JSON Supabase rejected
+    // without having to re-run a $0.30 Opus call to reproduce.
+    const distDir = path.resolve(process.cwd(), 'dist');
+    await mkdir(distDir, { recursive: true });
+    const debugPath = path.join(
+      distDir,
+      `brief-attempt-${decisionId.slice(0, 8)}-${Date.now()}.json`
+    );
+    await writeFile(
+      debugPath,
+      JSON.stringify({ brief: sanitizedBrief, raw_research: sanitizedRawResearch }, null, 2),
+      'utf-8'
+    );
+
     const { data: briefRow, error: briefInsErr } = await supabase
       .from('product_briefs')
       .insert({
         decision_id: decisionId,
-        brief: brief as unknown as Record<string, unknown>,
-        raw_research: {
-          keywords,
-          search_results: searchResults,
-          decision_snapshot: decision
-        },
+        brief: sanitizedBrief,
+        raw_research: sanitizedRawResearch,
         recommendation: brief.recommendation,
         confidence: brief.confidence,
         cost_usd: totalCostUsd,
@@ -259,6 +306,12 @@ export async function researchDecision(
       })
       .select('id')
       .single();
+
+    if (briefInsErr) {
+      console.error(
+        `  insert failed; debug payload at ${debugPath} (size ${JSON.stringify({ brief: sanitizedBrief, raw_research: sanitizedRawResearch }).length} bytes)`
+      );
+    }
 
     if (briefInsErr || !briefRow) {
       throw new Error(
@@ -272,7 +325,8 @@ export async function researchDecision(
     currentStep = 'render_markdown';
     const markdown = renderBriefAsMarkdown(brief, decision, {
       briefId,
-      costUsd: totalCostUsd
+      costUsd: totalCostUsd,
+      agentVersion: AGENT_VERSION
     });
 
     // Update brief row with markdown
@@ -372,7 +426,14 @@ export async function researchDecision(
         metadata: {
           keywords_used: keywords,
           num_listings: searchResults.length,
-          etsy_searches: keywords.length
+          etsy_searches: keywords.length,
+          competitive_landscape: competitive.landscape.map(l => ({
+            keyword: l.keyword,
+            classification: l.classification,
+            median_percent: Math.round(l.median_percent * 100),
+            scored_count: l.scored_count
+          })),
+          competitive_stats: competitive.stats
         }
       })
       .eq('id', runId);

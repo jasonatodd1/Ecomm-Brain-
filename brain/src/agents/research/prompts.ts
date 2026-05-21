@@ -4,6 +4,7 @@ import type {
   NicheMemoryRow
 } from './types.js';
 import type { MarketAggregates } from './aggregates.js';
+import type { CompetitiveLandscapeEntry } from './competitive.js';
 
 // ---------------------------------------------------------------------------
 // (a) Keyword extraction
@@ -117,11 +118,61 @@ function formatEtsyResults(results: EtsySearchResult[]): string {
     .join('\n\n');
 }
 
+function formatCompetitiveLandscape(
+  landscape: CompetitiveLandscapeEntry[]
+): string {
+  if (landscape.length === 0) {
+    return '(No competitive landscape computed — supply-side SEO data is unavailable. Reason about competition qualitatively from the raw listings above.)';
+  }
+
+  const lines: string[] = [];
+  lines.push(
+    'For each keyword we extracted, we scored the top 10 incumbents (by num_favorers) against a 10-rule deterministic SEO rubric:'
+  );
+  lines.push(
+    '  title_length, title_keyword_placement, tag_count, tag_quality, description_length,'
+  );
+  lines.push(
+    '  description_keyword_in_preview, description_scannable_structure, shop_section_assigned,'
+  );
+  lines.push(
+    '  attribute_fill_rate (skipped — needs taxonomy data), ai_disclosure_compliance (skipped — needs signature detection).'
+  );
+  lines.push('');
+  lines.push(
+    'Classifications: open_field (all top results <50%) > weak_incumbents (3+ <60%) > red_ocean (3+ ≥80%) > mixed.'
+  );
+  lines.push('');
+
+  landscape.forEach((entry, i) => {
+    lines.push(
+      `[${i + 1}] keyword="${entry.keyword}" → ${entry.classification.toUpperCase()} (median ${(entry.median_percent * 100).toFixed(0)}%, n=${entry.scored_count})`
+    );
+    lines.push(`    ${entry.gap_summary}`);
+    if (entry.top_incumbents.length > 0) {
+      lines.push('    Top incumbents (by num_favorers):');
+      entry.top_incumbents.forEach((inc, j) => {
+        const weakStr =
+          inc.weak_areas.length > 0
+            ? ` | weak: ${inc.weak_areas.slice(0, 4).join(', ')}`
+            : '';
+        lines.push(
+          `      ${j + 1}. ${inc.score}/${inc.max} (${(inc.percent * 100).toFixed(0)}%) — ${inc.title.slice(0, 110)}${weakStr}`
+        );
+      });
+    }
+    lines.push('');
+  });
+
+  return lines.join('\n');
+}
+
 export function buildSynthesisPrompt(
   decision: DecisionRecord,
   nicheMemory: NicheMemoryRow[],
   searchResults: EtsySearchResult[],
-  aggregates: MarketAggregates
+  aggregates: MarketAggregates,
+  competitiveLandscape: CompetitiveLandscapeEntry[] = []
 ): string {
   const ctx = decision.context;
   const source = typeof ctx['source'] === 'string' ? ctx['source'] : 'unknown';
@@ -152,6 +203,15 @@ ${formatEtsyResults(searchResults)}
 ${formatAggregates(aggregates)}
 
 Use these EXACT numerical values in the market_summary section of your output. Do not recalculate. Your job is qualitative synthesis: identify common_formats, common_features, opportunity_gaps, and notable_features per top seller from the raw listing data above.
+
+== COMPETITIVE SEO LANDSCAPE (Tuning Pass 2 — supply-side gap analysis) ==
+${formatCompetitiveLandscape(competitiveLandscape)}
+
+This is the brain's strategic edge: demand × (1 / supply quality), not demand alone. Use these scores AS EVIDENCE in your reasoning and differentiation_angle:
+- If the keyword classification is "weak_incumbents" or "open_field", you have a real opening even as a zero-review shop. CITE the specific weak areas (e.g., "top 3 results for 'X' average 52% — weak in description_length and shop_section_assigned") in brief.reasoning as concrete evidence for the proceed call.
+- If classification is "red_ocean", lower your recommended confidence even when demand signals are strong — a 90% incumbent field is a meaningful headwind for HillwardStudio.
+- The listing.differentiation_angle should be sharpened by the common weak_areas: if incumbents are missing FAQs, you have an FAQ angle; if they're under-titled, lean into a full 140-char title; if no shop sections, make sure to set one.
+- Output the per-keyword classifications + top_incumbents VERBATIM as listing.competitive_landscape — do not invent or alter scores; they are the engine's deterministic output.
 
 == EVALUATION RULES ==
 Be skeptical. Your job is to make a real recommendation, not to please anyone.
@@ -187,6 +247,56 @@ Downstream agents consume these fields VERBATIM. Specifics matter.
 - "market_summary.opportunity_gaps" feeds niche memory and future product decisions.
 - Numbers come from the pre-computed aggregates above — use them verbatim.
 
+== TUNING PASS 2 — STRUCTURED LISTING.DESCRIPTION ==
+The legacy listing.description_angles array is no longer the publish-time artifact; it stays only as a short summary of the strongest 3-5 angles. The actual description body that the Listing Agent will render to Etsy is listing.description, a structured object. Quality bar:
+
+- listing.description.hook: 130-160 chars, single sentence. MUST contain listing.primary_keyword verbatim (or its core phrase) within those 160 chars — this is the snippet Etsy renders in search results. Name the buyer's specific pain alongside the keyword. Examples of the pattern (use as STRUCTURE reference; write your own copy for THIS product):
+  - "The A5 monthly calendar printable for planner people tired of daily and weekly grids they never use — month-to-month plus three note styles in one PDF."
+  - "A vintage nursery wall art printable in a gender-neutral palette with storybook softness — five sizes, instant download, ready to frame today."
+
+- listing.description.why_this_one: 2-4 sentences. Render the differentiation_angle as a paragraph. Weave in 1-2 supporting_keywords naturally. If the competitive_landscape shows weak incumbents, this paragraph is where the buyer feels the gap being closed. Match the tone of the hook — calm, confident, not promotional.
+
+- listing.description.whats_included: bulleted list. Pull VERBATIM from product.format.includes — same items, same order. Do NOT re-phrase. The Listing Agent renders each item as a "- item" line; do not include the dash yourself.
+
+- listing.description.print_sizes: OPTIONAL. Wall-art or other multi-size products only. Each entry is one print size with a one-line use-context (e.g. "8x10\\" — cozy bedside or shelf scale"). Omit entirely (set to null) for single-size products like planners.
+
+- listing.description.how_it_works: 3-5 numbered steps walking through download → print/use → display. Digital-product specific. The Listing Agent renders each as "1. step" so do not number the strings yourself.
+
+- listing.description.faq: 5-7 Q/A entries. The FIRST 2-3 Qs MUST map to brief.risks entries whose nature is customer-facing (IP-protection → "Is this an original illustration?"; page-count perception → "Will N pages be enough?"; dating concerns → "Is this dated for a specific year?"). The remaining Qs cover standard digital-product friction: software needed, home printing, shipping, gift use. Each Q starts with "Q. ", each A starts with "A. ".
+
+- listing.description.closing: 1-2 sentences. Generic shop closing usable across all HillwardStudio products — do NOT enumerate product categories (no "planner inserts and nursery prints"). The standard line is: "Thanks for stopping by HillwardStudio. Every piece in the shop is designed with the same intention — quiet, considered, and built to earn its place rather than disappear into a download folder." Use this exact line for all v2 briefs unless you have a specific better fit.
+
+- listing.description.attribute_vocabulary: 6-10 short terms that appear consistently across title + etsy_tags + attribute_intent + hook. Cross-field repetition is itself an SEO signal; this list makes the repetition explicit. Example for nursery print: ["vintage", "watercolor", "gender neutral", "nursery", "printable", "cottagecore", "heirloom"].
+
+== TUNING PASS 2 — listing.attribute_intent (SEMANTIC ONLY) ==
+This is a CONTRACT CHANGE. The Research Agent NEVER enumerates store-specific raw attribute values (no "Babies", no "Cottagecore", no "Digital Download"). Etsy attribute schemas vary by taxonomy node — Recipient doesn't exist on Digital Prints, Materials is constrained-vocabulary on planners. Hardcoding raw values at brief time costs real edit time.
+
+Instead, emit SEMANTIC descriptors. The Listing Agent looks them up against each store's live possible_values response and either substitutes the closest semantic match or leaves the slot blank.
+
+- style_descriptors: 3-6 lowercase style descriptors (e.g. ["vintage", "cottagecore", "watercolor"])
+- audience_descriptors: 2-4 buyer-facing audience descriptors (e.g. ["babies", "gender-neutral", "new parents"])
+- occasion_descriptors: 2-4 use-occasion descriptors (e.g. ["baby shower", "newborn gift", "nursery decor"])
+- color_descriptors: 3-5 color/palette descriptors (e.g. ["warm neutral", "sage green", "off-white"])
+- materials_intent: 2-4 medium descriptors (e.g. ["digital download", "printable", "watercolor illustration"])
+
+== TUNING PASS 2 — listing.image_spec (≥4 entries) ==
+Explicit slot manifest the future Listing Agent walks. Cover at minimum: 1 hero, 1 lifestyle, 1 whats_included graphic, 1 size_grid (wall art) OR 1 lifestyle_detail (other categories). Each entry:
+- kind: one of "hero" | "lifestyle" | "whats_included" | "size_grid" | "lifestyle_detail"
+- purpose: one sentence on what the image must communicate
+- dims_recommended: free-form spec (e.g. "2000×2000 px square" or "1500×2000 px portrait")
+- style_notes: 1-2 sentences on tone / composition / what to reference
+
+== TUNING PASS 2 — listing.shop_section_suggestion ==
+A single name string (e.g. "Nursery Wall Art" or "Planner Inserts"). The Listing Agent matches this against the shop's existing sections; creates a new one if absent and well-formed.
+
+== TUNING PASS 2 — audience persona ==
+Top-level audience object, three fields:
+- persona: 1-2 sentences naming the buyer archetype (e.g. "The A5 binder minimalist — planner enthusiasts on r/planneraddicts who already own a Filofax or Kikki-K and are tired of inserts cluttered with daily/weekly grids they don't use.").
+- primary_search_intent: 1 sentence on what the buyer is literally typing into Etsy and why (e.g. "Searching 'A5 monthly insert' because they want the calendar-only flexibility their current daily-focused inserts don't give.").
+- decision_factors: 3-5 short phrases capturing what tips this buyer from browsing to buying (e.g. ["both week-start variants included", "undated so it never expires", "warm-neutral aesthetic, not floral", "fits Filofax A5 spacing", "instant download"]).
+
+Drives description voice and informs every attribute_intent + image_spec choice.
+
 == LISTING STRATEGY RULES ==
 Titles describe what the product IS, not what it ISN'T. When the buyer expresses pain negatively ("I don't want X"), translate it into positive product language (what the product offers that solves the pain). Negative framing in titles ("NOT a X", "no Y", "without Z") is FORBIDDEN — it wastes keyword space matching against the thing buyers don't want, sounds defensive, and is unusual seller language on Etsy.
 
@@ -212,7 +322,12 @@ Return EXACTLY this structure as raw JSON. No markdown fences. No prose. No prea
 {
   "recommendation": "proceed" | "pivot" | "pass",
   "confidence": <number 0.0-1.0>,
-  "reasoning": "<2-4 sentences. Cite specific data points from above.>",
+  "reasoning": "<2-4 sentences. Cite specific data points from above, including AT LEAST ONE specific competitive_landscape figure (e.g., 'top 3 results for primary_keyword average XX% SEO score, weak in description_length and shop_section_assigned — gap exploitable via full-length structured description and an explicit shop section').>",
+  "audience": {
+    "persona": "<1-2 sentences naming the buyer archetype>",
+    "primary_search_intent": "<1 sentence on what they're typing into Etsy and why>",
+    "decision_factors": ["<3-5 short phrases capturing what tips browse → buy>"]
+  },
   "product": {
     "name": "<short product name, ~3-6 words>",
     "format": {
@@ -237,8 +352,42 @@ Return EXACTLY this structure as raw JSON. No markdown fences. No prose. No prea
     "supporting_keywords": ["<3-5 secondary keywords>"],
     "etsy_tags": ["<up to 13 Etsy tags, each ≤20 chars>"],
     "etsy_category": "<Etsy category path, e.g. 'Paper & Party Supplies > Paper > Calendars & Planners'>",
-    "description_angles": ["<3-5 selling angles for the listing description>"],
-    "differentiation_angle": "<the ONE thing this product does that competitors don't>"
+    "description_angles": ["<LEGACY field — 3-5 single-line angle summaries. Kept for backward compat; the publishable body now lives in listing.description below.>"],
+    "differentiation_angle": "<the ONE thing this product does that competitors don't — should be reinforced by the competitive_landscape gap_summaries above>",
+    "description": {
+      "hook": "<130-160 chars, single sentence, primary_keyword inside, names buyer pain>",
+      "why_this_one": "<2-4 sentences rendering differentiation_angle as a paragraph; woven with supporting_keywords>",
+      "whats_included": ["<bullets — VERBATIM from product.format.includes; no leading dashes>"],
+      "print_sizes": ["<OPTIONAL — wall art / multi-size only; format like '8x10\\\" — cozy bedside or shelf scale'; OMIT entirely if not applicable>"],
+      "how_it_works": ["<3-5 steps; do not number; renderer will>"],
+      "faq": [
+        { "q": "<Q. ...>", "a": "<A. ...>" }
+      ],
+      "closing": "<Use exactly: 'Thanks for stopping by HillwardStudio. Every piece in the shop is designed with the same intention — quiet, considered, and built to earn its place rather than disappear into a download folder.' — unless a clearly better fit exists for this specific product>",
+      "attribute_vocabulary": ["<6-10 short terms that recur across title + tags + attribute_intent + hook for cross-field consistency>"]
+    },
+    "attribute_intent": {
+      "style_descriptors": ["<3-6 SEMANTIC style descriptors (lowercase)>"],
+      "audience_descriptors": ["<2-4 SEMANTIC audience descriptors>"],
+      "occasion_descriptors": ["<2-4 SEMANTIC occasion descriptors>"],
+      "color_descriptors": ["<3-5 SEMANTIC color descriptors>"],
+      "materials_intent": ["<2-4 SEMANTIC medium descriptors>"]
+    },
+    "image_spec": [
+      { "kind": "hero" | "lifestyle" | "whats_included" | "size_grid" | "lifestyle_detail",
+        "purpose": "<1 sentence on what this image must communicate>",
+        "dims_recommended": "<free-form spec, e.g. '2000×2000 px square'>",
+        "style_notes": "<1-2 sentences on tone / composition>" }
+    ],
+    "shop_section_suggestion": "<single name string, e.g. 'Nursery Wall Art'>",
+    "competitive_landscape": [
+      { "keyword": "<verbatim from the COMPETITIVE SEO LANDSCAPE input above>",
+        "classification": "red_ocean" | "mixed" | "weak_incumbents" | "open_field",
+        "top_incumbents": [
+          { "listing_id": "<string>", "title": "<string>", "score": <int>, "max": <int>, "percent": <0-1 float>, "weak_areas": ["..."] }
+        ],
+        "gap_summary": "<copy the engine's gap_summary verbatim>" }
+    ]
   },
   "pricing": {
     "recommended": <usd>,

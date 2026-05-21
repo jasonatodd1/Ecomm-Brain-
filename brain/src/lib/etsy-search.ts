@@ -77,15 +77,52 @@ function parsePrice(price?: EtsyPrice): number | null {
   return price.amount / price.divisor;
 }
 
-// Postgres jsonb rejects \u0000 (NUL) and a handful of other low control chars
-// even though JSON.stringify happily emits them. Etsy listing copy is the
-// single most common source — sellers paste decorative text from various tools
-// that embed these bytes. Strip them at the wrapper boundary so any consumer
-// of EtsySearchResult / EtsyShopInfo is safe to insert into Supabase jsonb.
+// Postgres jsonb rejects two classes of bytes that JSON.stringify happily
+// emits:
+//   1. \u0000 (NUL) + most C0 control chars. Etsy listing copy is the single
+//      most common source — sellers paste decorative text from tools that
+//      embed these bytes.
+//   2. Lone UTF-16 surrogates. A surrogate code unit (\uD800-\uDFFF) is only
+//      valid in a high/low pair encoding a supplementary character. Lone
+//      surrogates arise from two real-world sources we hit in this project:
+//        (a) Sellers using mathematical-bold/italic unicode (e.g. 𝑾𝒉𝒂𝒕)
+//            in descriptions — when we slice description_preview to a fixed
+//            char count below, the slice can land between the high/low
+//            surrogate of one of those characters.
+//        (b) Occasional LLM outputs that emit malformed surrogate sequences.
+//      Strip lone surrogates so any downstream consumer of EtsySearchResult /
+//      EtsyShopInfo / synthesized briefs is safe to insert into Supabase
+//      jsonb without hitting the generic "Empty or invalid json" error.
 function sanitizeForJsonb(s: string): string {
-  // Remove NUL bytes and other C0 control chars EXCEPT \t (\x09), \n (\x0A),
-  // and \r (\x0D), which are legal in jsonb.
-  return s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
+  let out = '';
+  for (let i = 0; i < s.length; i++) {
+    const code = s.charCodeAt(i);
+    // C0 control chars EXCEPT \t (\x09), \n (\x0A), \r (\x0D).
+    if (
+      (code >= 0x00 && code <= 0x08) ||
+      code === 0x0b ||
+      code === 0x0c ||
+      (code >= 0x0e && code <= 0x1f)
+    ) {
+      continue;
+    }
+    // High surrogate: must be followed by a low surrogate. If not, drop it.
+    if (code >= 0xd800 && code <= 0xdbff) {
+      const next = s.charCodeAt(i + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        out += s[i] + s[i + 1];
+        i++;
+      }
+      continue;
+    }
+    // Low surrogate appearing without a preceding high surrogate: drop it.
+    // (Paired low surrogates were already consumed in the branch above.)
+    if (code >= 0xdc00 && code <= 0xdfff) {
+      continue;
+    }
+    out += s[i];
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -339,6 +376,11 @@ export interface EtsyListingDetails {
   currency_code: string | null;
   /** Etsy returns seconds-since-epoch; null if absent. */
   last_modified_timestamp: number | null;
+  /**
+   * Shop section ID assigned to this listing. Null when the seller did not
+   * assign one. Used by the SEO scorer as a category-signal proxy.
+   */
+  shop_section_id: number | null;
   /** Full Etsy response, sanitized for jsonb. */
   raw: Record<string, unknown>;
 }
@@ -348,12 +390,21 @@ interface EtsyListingDetailsResponse extends EtsyListing {
   views?: number;
   tags?: unknown;
   last_modified_timestamp?: number;
+  shop_section_id?: number;
   error?: string;
 }
 
 // Recursively strip NUL/control bytes from any string value in a nested
 // object/array so the full raw response is safe to insert into jsonb.
 // Mirrors sanitizeForJsonb but walks the whole tree.
+//
+// Exported so other code paths writing arbitrary nested JSON into Supabase
+// jsonb columns (e.g. LLM-synthesized briefs) can reuse the same scrubber
+// rather than re-implement it.
+export function sanitizeJsonbDeep(value: unknown): unknown {
+  return sanitizeDeep(value);
+}
+
 function sanitizeDeep(value: unknown): unknown {
   if (typeof value === 'string') return sanitizeForJsonb(value);
   if (Array.isArray(value)) return value.map(sanitizeDeep);
@@ -487,6 +538,8 @@ export async function getListing(
       typeof data.last_modified_timestamp === 'number'
         ? data.last_modified_timestamp
         : null,
+    shop_section_id:
+      typeof data.shop_section_id === 'number' ? data.shop_section_id : null,
     raw: sanitizeDeep(data) as Record<string, unknown>
   };
 }
