@@ -53,10 +53,14 @@ async function main(): Promise<void> {
       }
     }
 
+    const ext = path.extname(absOutput).toLowerCase();
+    const imgType = ext === '.jpg' || ext === '.jpeg' ? 'jpeg' : 'png';
+
     await page.screenshot({
       path: absOutput as `${string}.png`,
       fullPage: false,
-      type: 'png',
+      type: imgType,
+      ...(imgType === 'jpeg' ? { quality: 92 } : {}),
     });
 
     const sizeKb = (statSync(absOutput).size / 1024).toFixed(1);
