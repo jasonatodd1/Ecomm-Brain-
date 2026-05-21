@@ -4,13 +4,10 @@
 
 ## Current Focus
 
-### HillwardStudio A5 Monthly Planner v1 — manual fulfillment via code pipeline
-- [x] Code-based PDF rendering pipeline (Puppeteer + HTML/CSS)
-- [ ] Real 28-page template authored by Claude
-- [ ] Iteration to production-ready quality
-- [ ] Listing photos via fal.ai
-- [ ] Etsy shop setup (in parallel)
-- [ ] Listing creation and publish
+### Drive first sale (both listings live, daily monitor capturing baseline)
+- [ ] Run `npm run monitor:listings` daily by hand for 3–5 days before scheduling cron — confirms baseline behavior, surfaces edge cases (state changes, sold_out, tag edits, etc.) per principle #7
+- [ ] Add `FAL_KEY` to Railway Variables before any deployed code path imports `src/lib/fal.ts` (currently only in `.env.local`)
+- [ ] First sale (validation milestone) — both listings active, awaiting market signal
 
 ## Data-Quality Bugs (open)
 - [ ] `opportunities.niche` field is null on every row — likely scoring engine omission
@@ -22,7 +19,7 @@
 - [ ] `expense.ts` utility for programmatic cost logging (no more raw SQL inserts)
 - [ ] Per-provider cost caps with daily limits (runaway-spend guardrail)
 - [ ] Model router abstraction (Opus / Sonnet / Haiku / Gemini swap without code changes)
-- [ ] Cron scheduling on Railway (after scoring engine validated)
+- [ ] Cron scheduling on Railway (after scoring engine validated AND after 3–5 days of manual `monitor:listings` runs validate output — listings monitor is the most immediate cron candidate; collectors next)
 - [ ] Scoring formula ceiling: multiple Google Trends keywords hitting confidence 1.000 — lost discrimination at top, needs refactor (higher ceiling, log scale, or different math)
 - [ ] Google Trends velocity volatility: keywords can swing from +8% to +494% in one cycle. Need historical tracking and a stability score before trusting single-run velocity
 - [ ] LLM cost tracking integration with cost_log table (currently logging cost.api_call activity events but not aggregating)
@@ -44,11 +41,38 @@
 
 ## Done
 
+### First Listings Live on Etsy (HillwardStudio)
+- [x] A5 Monthly Calendar Printable — `etsy_listing_id` 4508059444 — $3.49 — opportunity `c3fa0a4d…` (planneraddicts Reddit buyer)
+- [x] Vintage Bunny Nursery Wall Art — `etsy_listing_id` 4508704536 — $4.49 — opportunity `d7750211…` (nursery wall art printable)
+
+### Listings Backfill + Daily Monitoring
+- [x] Migration 0006 (`listings_monitoring`): mirror columns on `listings` (views, num_favorers, etsy_state, tags, etsy_last_modified_at, last_snapshot_at), unique index on `etsy_listing_id`, `listings_stats` time-series table with `raw` jsonb for future-proofing, indexes on `(listing_id, snapshot_at DESC)` and `(snapshot_at DESC)`
+- [x] `getListing()` added to `brain/src/lib/etsy-search.ts` — reuses keystring:shared_secret auth, returns normalized struct + sanitized raw response; supporting helpers `sanitizeDeep` (recursive jsonb sanitization) and `priceToCents`
+- [x] `seed-listings.ts` + `npm run seed:listings` — idempotent SELECT-then-INSERT by `etsy_listing_id`
+- [x] `monitor-listings.ts` + `npm run monitor:listings` — concurrent (2 in-flight, 200ms stagger), inserts `listings_stats` first then updates mirror columns; activity row per snapshot (`listing.snapshotted`); separate warning if mirror UPDATE fails post-snapshot; exits non-zero on any failure
+- [x] Both live listings seeded + first snapshot captured: A5 planner (6 views / 0 favorers / $3.49 / 13 tags / active), bunny print (4 views / 0 favorers / $4.49 / 12 tags / active)
+- [x] `opportunity_id` wired on both listings for full signal → opportunity → listing traceability
+
+### Image Generation Infra (fal.ai)
+- [x] `brain/src/lib/fal.ts` — shared infra: configured client (auths via `FAL_KEY`), `MODEL_ALIASES` (`flux-pro`, `flux-pro-edit`, `clarity`), cost estimators, `resolveReferenceImage` (uploads local paths to fal CDN), `downloadImage`, `verifyAndCorrectDimensions` (layer 2/3 dimension guarantee — silent sharp correction <1.5×, throws if larger), output path builders (`buildAutoOutputPath`, `buildUpscaleOutputPath`, `indexOutputPath`), `formatFalValidationError` (extracts `err.body.detail[]`)
+- [x] `brain/src/tools/generate-image.ts` + `npm run gen` — FLUX.2 Pro text-to-image and edit (multi-ref, up to 9). CLI + programmatic. Activity row per generation (`image.generated`)
+- [x] `brain/src/tools/upscale-image.ts` + `npm run upscale` — Clarity Upscaler with faithful-tuning defaults (`creativity=0.1`, `resemblance=1.0`). Supports `--scale` or `--size` with sharp post-correction
+- [x] Smoke tests passed end-to-end: vintage bunny generated at 1728×2304 ($0.075, 22s), upscaled to 5008×6680 ($0.10, 70s, dimensions exact, `corrected_from` null)
+- [x] `buildAutoOutputPath` double-hyphen slug bug fixed (commit `0d1b419`)
+- [x] Clarity `resemblance` default lowered from 1.5 → 1.0 (fal API requires ≤1)
+- [x] `formatFalValidationError` helper surfaces fal 422 `body.detail[]` in both gen + upscale tools (no more silent "Unprocessable Entity")
+
+### Code-based Asset Pipeline
+- [x] Code-based PDF rendering (Puppeteer + HTML/CSS) for HillwardStudio A5 monthly planner — `npm run render:planner`
+- [x] 28-page A5 planner template authored: cover + 24 monthly spreads + 3 notes pages; v3 with SVG dot grid, editorial cover, weekend tint, priorities sidebar
+- [x] `render-graphic.ts` + `npm run render:graphic` — generic HTML → PNG/JPEG screenshot tool (format auto-detected from output extension; JPEG quality 92)
+- [x] `resize-print-variants.ts` + `npm run resize:print` — 5 print sizes (8×10, 11×14, 16×20, 18×24, 24×36) from a 5008×6680 master via `sharp.extract`
+
 ### Infrastructure
-- [x] Supabase project with 8 tables (signals, opportunities, listings, activity, decisions_needed, niche_memory, system_state, cost_log) + RLS enabled
+- [x] Supabase project with 12 tables (signals, opportunities, listings, listings_stats, activity, decisions_needed, niche_memory, system_state, cost_log, agent_config, agent_runs, product_briefs) + RLS enabled on the core 8
 - [x] Railway service deployed (us-west2 region) with GitHub auto-deploy
 - [x] HillwardStudio Etsy seller account opened
-- [x] MCPs connected: Supabase (read-only), Railway, Vercel
+- [x] MCPs connected: Supabase, Railway, Vercel
 
 ### Signal Collection
 - [x] SerpApi Google Trends collector (9 working keywords)

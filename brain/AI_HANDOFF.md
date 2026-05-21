@@ -2,7 +2,7 @@
 
 > Paste this entire document into a fresh Claude conversation to pick up where the previous one left off. Verify-flagged items (`[VERIFY]`) are values the AI could not confirm from code/Supabase alone and should be re-checked by the operator.
 
-Last updated: 2026-05-21 (Thu). Reflects state after commit `3c98373` (`chore: untrack node_modules/.package-lock.json`).
+Last updated: 2026-05-21 (Thu, second refresh). Reflects state after the listings monitoring pipeline shipped and opportunity_id wired on both live listings.
 
 ---
 
@@ -28,32 +28,35 @@ We are currently at the **Product → List** stage for the first two products. T
 - **Shop name:** HillwardStudio
 - **Shop URL:** `https://www.etsy.com/shop/HillwardStudio` [VERIFY — code does not pin the canonical URL]
 - **Seller account:** opened
-- **Live listings:** **0.** The `listings` table is empty. Nothing is published to Etsy yet.
-- **Reviews:** 0 (new shop — explicit risk factor in every brief)
-- **Monitoring status:** N/A — nothing to monitor until first listing goes live
+- **Live listings:** **2.** Both went live shortly before this conversation; backfilled into Supabase via `npm run seed:listings` + first snapshot via `npm run monitor:listings`.
+- **Reviews:** 0 (new shop — explicit risk factor in every brief; still applies)
+- **Monitoring status:** built and manually validated. Daily snapshots via `monitor-listings.ts` are operator-triggered for now — cron deferred per principle #7 until 3–5 days of manual runs confirm baseline behavior.
 
-**Products in flight (pre-listing):**
+**Live listings:**
 
-| Product | Folder | Brief | Status |
-|---|---|---|---|
-| A5 Monthly Planner (28pg, undated, MVP) | `brain/products/hillward-a5-monthly/` | `eed67089` decision → brief `0834bacd` (proceed, 0.72) | HTML template authored (v3 — SVG dot grid, editorial cover). Not yet rendered to final PDF for upload. |
-| Nursery Bunny Print | `brain/products/hillward-nursery-bunny/` | `2af0ba72` decision → brief `ea836ab6` (proceed, 0.62) | `bunny 10.png` master image present. Five print-size variants (8x10, 11x14, 16x20, 18x24, 24x36) generated via `npm run resize:print`. `whats-included.html` listing graphic authored. Not yet listed. |
+| Product | Etsy ID | Price | Opportunity | Brief | First snapshot |
+|---|---|---|---|---|---|
+| A5 Monthly Calendar Printable with Notes Pages \| Minimalist Undated Planner Inserts… | `4508059444` | $3.49 | `c3fa0a4d…` (planneraddicts Reddit buyer) | `0834bacd` (proceed, 0.72) | 6 views / 0 favorers / 13 tags / `active` @ 2026-05-21 20:41 UTC |
+| Vintage Bunny Nursery Wall Art Printable \| Watercolor Rabbit Sketch \| Gender Neutral Baby Room Decor… | `4508704536` | $4.49 | `d7750211…` (nursery wall art printable) | `ea836ab6` (proceed, 0.62) | 4 views / 0 favorers / 12 tags / `active` @ 2026-05-21 20:41 UTC |
+
+URLs: [`hillwardstudio.etsy.com/listing/4508059444`](https://hillwardstudio.etsy.com/listing/4508059444) and [`etsy.com/listing/4508704536`](https://www.etsy.com/listing/4508704536).
 
 ---
 
 ## 3. TECH STACK
 
 ### Data
-- **Supabase** (Postgres + RLS). 11 tables in `public`:
-  - `signals` (619 rows) — raw collector output
+- **Supabase** (Postgres + RLS). 12 tables in `public` (added `listings_stats` via migration 0006):
+  - `signals` (619+ rows) — raw collector output
   - `opportunities` (11) — scored signals
   - `decisions_needed` (2) — surfaced for agent action; both `brief_ready`
   - `product_briefs` (5) — Research Agent output
-  - `listings` (0) — Etsy listings created (empty)
+  - `listings` (2) — live Etsy listings (mirror columns extended in migration 0006: `views`, `num_favorers`, `etsy_state`, `tags`, `etsy_last_modified_at`, `last_snapshot_at`)
+  - `listings_stats` (2) — **new in migration 0006.** Append-only time series of every snapshot. Includes `raw` jsonb with the full Etsy response for future-proofing. Indexed on `(listing_id, snapshot_at DESC)` and `(snapshot_at DESC)`.
   - `niche_memory` (22) — learnings keyed by `niche_tag` (`planneraddicts`: 17, `general`: 5)
   - `agent_config` (0) — tunable params per agent (no rows seeded yet; presence-only read in Research Agent)
   - `agent_runs` (7) — every agent execution with cost/status/timings
-  - `activity` (256) — chronological event log; now includes `image.generated` / `image.upscaled` rows from the fal tools
+  - `activity` (260+) — chronological event log; now includes `image.generated` / `image.upscaled` from fal tools and `listing.snapshotted` / `listings.monitor_complete` from the monitor
   - `cost_log` (1) — spend tracking (under-utilized; LLM and image costs currently logged as `cost.api_call` / image-tool activity events, not aggregated to this table — see TODO)
   - `system_state` (3) — global caps/flags/mode
 - **RLS:** enabled on 8 tables; **disabled** on `agent_config`, `agent_runs`, `product_briefs` (these are server-write-only, but Supabase advisor flags this — open security item if anon key ever gets exposed)
@@ -129,6 +132,8 @@ Root: `brain/`. All paths below are relative to that.
 - **`score-opportunities.ts`** — scoring engine MVP. Pulls last 7 days of signals. Pass A scores Google Trends keywords (interest × velocity, capped); Pass B scores individual Reddit buyer posts (upvotes-weighted). Upserts to `opportunities`. Known limits: confidence ceiling saturates at 1.000 for top Google Trends keywords, `source_count` stuck at 1 (doesn't aggregate across runs), `niche` field never populated.
 - **`research-decision.ts`** — CLI runner for the Research Agent. `--decision-id=<uuid>` arg; default falls back to the planneraddicts seed via `context->>post_url` lookup. Exits process explicitly after 500ms drain.
 - **`seed-planneraddicts-decision.ts`** — one-shot seed for the first decision (r/planneraddicts "Looking for something I can't find" post — explicit A5 monthly buyer-intent).
+- **`seed-listings.ts`** — `npm run seed:listings`. Idempotent SELECT-then-INSERT by `etsy_listing_id`. Currently seeds the two HillwardStudio listings (`4508059444` A5 planner, `4508704536` bunny print). All other fields left null — `monitor-listings.ts` populates them from Etsy on first run.
+- **`monitor-listings.ts`** — `npm run monitor:listings`. Reads all rows from `listings` with non-null `etsy_listing_id`, fetches each via `getListing()` with `mapWithLimit(2, 200ms)` concurrency. Per listing: INSERT into `listings_stats` first (time series is source of truth), then UPDATE `listings` mirror columns. Logs `agent='listing'`, `action='listing.snapshotted'` per success and a run-level `listings.monitor_complete`. Separate warning row (`listing.mirror_update_failed`) if the mirror UPDATE fails after the time-series row already landed — prevents silent divergence. Exits non-zero if any listing failed. Designed for daily cron (deferred until manually validated).
 - **`reclassify-reddit-signals.ts`** — backfill script that re-runs the Haiku classifier over existing Reddit signals to upgrade precision without re-collecting.
 
 ### `src/tools/`
@@ -145,7 +150,7 @@ Root: `brain/`. All paths below are relative to that.
 
 ### `src/lib/`
 - **`supabase.ts`** — `service_role` Supabase client. Loads `.env.local` at import time; throws on missing creds. `auth.persistSession: false`. Server-side only.
-- **`etsy-search.ts`** — Etsy Open API v3 wrapper. `searchEtsy(keyword, { limit })` against `/v3/application/listings/active`. `getShop(shop_id)` against `/v3/application/shops/{shop_id}` for seller enrichment. Uses `x-api-key: ${KEYSTRING}:${SHARED_SECRET}` (post Feb-2026 auth requirement). `sanitizeForJsonb` strips NUL bytes and other control chars from raw Etsy listing data before persisting (fixes Postgres jsonb rejection observed on wall-art listings).
+- **`etsy-search.ts`** — Etsy Open API v3 wrapper. Three public functions: `searchEtsy(keyword, { limit })` against `/v3/application/listings/active` (Research Agent); `getShop(shop_id)` against `/v3/application/shops/{shop_id}` for seller enrichment (Research Agent); `getListing(listing_id)` against `/v3/application/listings/{listing_id}` for daily snapshots (Listings Monitor — returns normalized struct + sanitized full raw response for `listings_stats.raw`). All three use `x-api-key: ${KEYSTRING}:${SHARED_SECRET}` (post Feb-2026 auth requirement). Helpers: `sanitizeForJsonb` (single string), `sanitizeDeep` (recursive object/array walk used for raw response storage), `priceToCents` (normalizes Etsy's `{amount, divisor}` to integer cents).
 - **`concurrency.ts`** — `mapWithLimit(items, limit, staggerMs, fn)`. Async pool with bounded concurrency and per-task stagger. Etsy uses `limit=2, staggerMs=200` (~5 req/sec sustained, well under Etsy's 10 req/sec ceiling). Preserves input order.
 - **`log.ts`** — `log({ agent, action, description, severity?, metadata? })`. Writes to stdout (for Railway log tail) **and** the `activity` table. On insert failure, prints `[ACTIVITY_LOG_FAILED]` to stderr — never swallows the error. Agents enum: `intel | product | listing | customer_service | orchestrator | system`.
 - **`classify-intent.ts`** — Haiku 4.5 classifier. Returns `{ intent: 'buyer' | 'seller' | 'other', confidence, reasoning }`. Lazy singleton client. Used by `collect-reddit.ts` for `mixed`/`buyer` subreddits.
@@ -175,13 +180,14 @@ Root: `brain/`. All paths below are relative to that.
 | Research Agent V1 | **Built + validated** | 5 briefs produced across 2 niches (planneraddicts, general/nursery wall art). Closed-loop with `niche_memory` verified: 4 opportunity gaps from brief v1 were re-confirmed in v2 (`evidence_count=2`). Synthesis prompt has been through tuning pass 1. |
 | Design Agent | **Infra built, agent not yet built** | The image-generation primitives a Design Agent would call now exist and are validated end-to-end (FLUX.2 Pro text-to-image, FLUX.2 Pro edit for image-to-image, Clarity Upscaler for print-resolution enlargement). Both tools are dual-mode — usable as CLI today (`npm run gen`, `npm run upscale`) and importable as `generateImage(opts)` / `upscaleImage(opts)` from an agent tomorrow. Smoke-tested: a 1728×2304 watercolor bunny was generated via FLUX.2 Pro and upscaled to 5008×6680 (print-master size) via Clarity, with the activity log already storing all metadata downstream agents would need. HTML/CSS layouts (planner, listing graphics) are still designed manually in-chat. |
 | Listing Agent | **Not built** | Etsy publish is currently fully manual. Brief → listing copy/photos/tags will be the next pipeline stage once a product is published manually and feedback patterns are observed. |
+| Listings Monitoring | **Built + manual** | `seed-listings.ts` + `monitor-listings.ts` running locally on demand. Both live listings seeded, first snapshots captured (see §2 for current numbers). Cron deferred per principle #7 — 3–5 days of manual runs first to confirm baseline (state changes, sold_out, tag edits all behave predictably) before scheduling daily on Railway. The migration (0006) and `listings_stats` time series are ready to absorb cron'd snapshots whenever the operator promotes it. |
 | Customer Service | **Not built** | Blocked on first sale. |
-| Optimization | **Not built** | Blocked on having performance data. |
-| Orchestrator (cron) | **Not built** | Currently every job is git-push-driven (Railway redeploys on commit and runs `npm start`). Cron scheduling is on the backlog until the scoring engine is fully trusted. |
+| Optimization | **Not built** | Blocked on having performance data — but `listings_stats` now starts accumulating that data immediately. After a week of snapshots, even a manual query can answer "views/day per listing" and "favoriting rate," which is the floor of optimization input. |
+| Orchestrator (cron) | **Not built** | Currently every job is git-push-driven (Railway redeploys on commit and runs `npm start`). Cron scheduling is on the backlog. `monitor-listings.ts` is the most immediate cron candidate (daily); collectors follow once their scoring outputs are fully trusted. |
 
-**What's validated end-to-end:** Signal collection → scoring → opportunity surfacing → research brief → image generation → image upscale-to-print. Outputs are reproducible, audited (`agent_runs` + `activity`), and cost-tracked.
+**What's validated end-to-end:** Signal collection → scoring → opportunity surfacing → research brief → image generation → image upscale-to-print → Etsy listing publish (manual) → daily snapshot into `listings_stats` with full signal-to-listing FK traceability via `opportunity_id`. Outputs are reproducible, audited (`agent_runs` + `activity`), and cost-tracked.
 
-**What's next:** ship the first product (nursery print is now the easier candidate — fal-generated bunny exists at print resolution, ready for the `resize:print` pipeline; planner needs final PDF render). Publish manually, observe Etsy-side feedback signals, then design the Listing Agent against real data.
+**What's next:** drive first sale. Run the monitor manually for a few days to baseline. Once a week of data exists, decide whether the lever is more traffic (Pinterest pin sets, Etsy SEO iteration) or conversion (listing photos, copy, pricing). The Listing Agent gets designed against that ground truth, not before.
 
 ---
 
@@ -204,13 +210,10 @@ Root: `brain/`. All paths below are relative to that.
 
 ### Current Focus
 
-#### HillwardStudio A5 Monthly Planner v1 — manual fulfillment via code pipeline
-- [x] Code-based PDF rendering pipeline (Puppeteer + HTML/CSS)
-- [ ] Real 28-page template authored by Claude
-- [ ] Iteration to production-ready quality
-- [ ] Listing photos via fal.ai
-- [ ] Etsy shop setup (in parallel)
-- [ ] Listing creation and publish
+#### Drive first sale (both listings live, daily monitor capturing baseline)
+- [ ] Run `npm run monitor:listings` daily by hand for 3–5 days before scheduling cron — confirms baseline behavior, surfaces edge cases (state changes, sold_out, tag edits, etc.) per principle #7
+- [ ] Add `FAL_KEY` to Railway Variables before any deployed code path imports `src/lib/fal.ts` (currently only in `.env.local`)
+- [ ] First sale (validation milestone) — both listings active, awaiting market signal
 
 ### Data-Quality Bugs (open)
 - [ ] `opportunities.niche` field is null on every row — likely scoring engine omission
@@ -222,7 +225,7 @@ Root: `brain/`. All paths below are relative to that.
 - [ ] `expense.ts` utility for programmatic cost logging (no more raw SQL inserts)
 - [ ] Per-provider cost caps with daily limits (runaway-spend guardrail)
 - [ ] Model router abstraction (Opus / Sonnet / Haiku / Gemini swap without code changes)
-- [ ] Cron scheduling on Railway (after scoring engine validated)
+- [ ] Cron scheduling on Railway (after scoring engine validated AND after 3–5 days of manual `monitor:listings` runs validate output — listings monitor is the most immediate cron candidate; collectors next)
 - [ ] Scoring formula ceiling: multiple Google Trends keywords hitting confidence 1.000 — lost discrimination at top, needs refactor (higher ceiling, log scale, or different math)
 - [ ] Google Trends velocity volatility: keywords can swing from +8% to +494% in one cycle. Need historical tracking and a stability score before trusting single-run velocity
 - [ ] LLM cost tracking integration with cost_log table (currently logging cost.api_call activity events but not aggregating)
@@ -264,6 +267,7 @@ Canonical doc: `brain/PRINCIPLES.md`. Summary of the 10 core architectural princ
 ## 9. KNOWN ISSUES
 
 ### Fixed (recently)
+- **`listings` schema couldn't store live Etsy state** — mirror columns missing, `title` was `NOT NULL` (originally meant for manual drafts), no time-series table for snapshots. Migration `0006_listings_monitoring` added mirror columns + relaxed `title` + created `listings_stats` (append-only with `raw` jsonb for future-proofing) + unique index on `etsy_listing_id` so seed is idempotent.
 - **`node_modules/.package-lock.json` still tracked in git** — left over from before `node_modules/` was gitignored. Untracked in commit `3c98373` ("chore: untrack node_modules/.package-lock.json"). File remains on disk; just no longer noisy in `git status`.
 - **Clarity `resemblance` range was outdated in `upscale-image.ts` defaults** — file's docstring claimed `0–3`, but fal's current Clarity schema requires `≤ 1`. Default `1.5` caused 422 on first smoke test. Fixed in commit `519bca0`: default lowered to `1.0`, docstring + CLI help corrected. Same commit also introduces `formatFalValidationError` (shared helper) so all fal `ValidationError` 422s now surface `err.body.detail[]` instead of a generic `"Unprocessable Entity"`.
 - **`buildAutoOutputPath` produced double-hyphen filenames** when the 40-char slug slice landed mid-word. Fixed in commit `0d1b419` (trim trailing hyphens after slicing). Existing file `2026-05-21-1255-vintage-watercolor-bunny-scalloped-oval--01.png` predates the fix and keeps its name.
@@ -272,7 +276,8 @@ Canonical doc: `brain/PRINCIPLES.md`. Summary of the 10 core architectural princ
 - **Etsy v3 auth format** — `x-api-key` had to switch from `keystring` to `keystring:shared_secret` per Etsy's Feb 9, 2026 change. Fixed in commit `465690d`.
 
 ### Open
-- **`FAL_KEY` not yet in Railway Variables.** Only in local `.env.local`. Any deployed job that imports `src/lib/fal.ts` will fail at module-load until this is added. Doesn't affect current cron-less, manual-only deploys, but worth knowing before any agent or job starts depending on fal-side work.
+- **`monitor-listings.ts` cron is intentionally deferred.** Per principle #7 ("build, validate, automate"), the monitor runs manually for 3–5 days before getting scheduled on Railway. Two snapshots in `listings_stats` so far (both from the same operator-triggered run on 2026-05-21). Once a few daily runs land cleanly, this is the most immediate cron candidate.
+- **`FAL_KEY` not yet in Railway Variables.** Only in local `.env.local`. Any deployed job that imports `src/lib/fal.ts` will fail at module-load until this is added. Doesn't affect current cron-less, manual-only deploys, but worth knowing before any agent or job (including a future cron'd `monitor-listings`) starts depending on fal-side work.
 - **RLS disabled on 3 tables** — `agent_config`, `agent_runs`, `product_briefs`. Server-write-only by current design, but flagged by Supabase advisor. Not a live exposure unless the anon key ever leaks. Decision deferred until dashboard work begins.
 - **All data-quality bugs** listed in §7.
 - **Scoring formula ceiling saturation** at confidence 1.000 — lost discrimination at the top of the funnel.
@@ -284,13 +289,13 @@ Canonical doc: `brain/PRINCIPLES.md`. Summary of the 10 core architectural princ
 
 ## 10. NEXT SESSION PRIORITIES
 
-Based on the current state (two proceed-recommended briefs, zero live listings, image-generation infra validated end-to-end, design + listing agents not yet built), the top three things to do when conversation resumes:
+Both listings are live and monitored. The single open validation milestone now is **first sale**. Top three things to do when conversation resumes:
 
-1. **Ship the nursery bunny listing first.** Image generation now produces print-ready assets (5008×6680 PNG at `brain/dist/gen/2026-05-21-1324-...-upscaled-2.9x.png`). Next concrete steps: (a) eyeball the upscale for visual fidelity — if it looks right, run it through `npm run resize:print` to produce the 5 print-size JPGs the brief calls for; if not, iterate prompt + regenerate (`--count=4` to triage variants for $0.30); (b) author listing copy from the brief (`title_template`, `description_angles`, `etsy_tags`); (c) shoot a hero "lifestyle on wall" graphic — try `npm run gen -- --ref=...bunny... --prompt="print framed on nursery wall, soft natural light, sage and cream interior"`; (d) publish to Etsy manually at $4.49 (brief `pricing.recommended`); (e) insert the resulting Etsy listing into the `listings` table so downstream agents have something to read.
-2. **Finalize and ship the A5 planner.** Template authored (v3 with SVG dot grid, editorial cover); next: run `npm run render:planner` to produce the actual PDF, eyeball it page-by-page (cover, monthly spreads, notes pages, font embedding), iterate on `index.html` until production-ready, then generate listing photos (likely via `npm run gen --ref=<pdf-page-screenshot>` for a "planner-on-desk" mockup), publish at $3.49 (brief recommendation), record in `listings`. Brief confidence is 0.72 — second-highest in the current pipeline.
-3. **Decide whether to start scaffolding the Listing Agent now or wait for first-sale signal.** Per principle #7 ("build, validate, automate"), the manual publish flow should run end-to-end at least once before automating. Recommendation: ship both products manually, observe Etsy's behavior (search rank, favorites, conversion), then design the Listing Agent against that ground truth — both `generateImage` and `upscaleImage` are already importable for it.
+1. **Establish baseline + triage edge cases.** Run `npm run monitor:listings` once per day for 3–5 days. Watch for: (a) views/favorers monotonically increasing or plateauing per listing — informs whether traffic vs. conversion is the bottleneck; (b) `etsy_state` ever becoming non-`active` (sold_out, removed) so the monitor's behavior under that condition is observed before cron; (c) `etsy_last_modified_at` drifting forward unexpectedly (indicates we edited the listing on Etsy and should reconcile the brief). After ~5 clean runs, promote `monitor:listings` to Railway cron (daily). Per principle #7 — manual first.
+2. **Decide the lever for first sale based on what the baseline shows.** Three plausible interventions, each cheap: (a) **Pinterest pin sets** — 5–10 SEO-rich pins per listing pointing at the Etsy URL (no fal cost; mostly time); (b) **Etsy SEO iteration** — if views are low, cross-check tags against the brief's `etsy_tags` and the top-seller patterns from the research brief; (c) **listing photo iteration** — use `npm run gen --ref=...` to produce lifestyle/in-context shots that complement the existing flat-art photos. Don't run all three at once — pick the one the baseline data points to so attribution is clean.
+3. **Add `FAL_KEY` to Railway Variables.** Two-minute task. Required before ANY deployed code path imports `src/lib/fal.ts` — and the moment cron picks up a job that imports it, deploy will start crashing at module-load. Doing it now is free insurance.
 
-Secondary, if time allows: knock out the three data-quality bugs in §7 — they're blocking trustworthy scoring re-runs. Also: add `FAL_KEY` to Railway Variables before any deployed code path imports `src/lib/fal.ts`.
+Secondary, if time allows: the three data-quality bugs in §7 still block trustworthy scoring re-runs; knocking them out closes the loop on the discovery pipeline. Also consider scaffolding the Listing Agent if the manual baseline reveals clear, repeatable mechanics — both `generateImage` and `upscaleImage` are already importable, and `monitor-listings.ts` shows the agent-loggable pattern (insert-then-mirror-then-log) it should follow.
 
 ---
 
