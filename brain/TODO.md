@@ -31,7 +31,16 @@
 
 ## Future (after first sale validation)
 - [ ] Product creation agent (design generation via Recraft/Ideogram/Flux, PDF assembly)
-- [ ] Etsy listing automation (auto-publish, image upload, description, pricing)
+- [ ] **Listing Agent** — full spec in `brain/LISTING_AGENT_REQUIREMENTS.md`. Store-agnostic core + per-store adapters (Etsy first, Pinterest next, Shopify deferred). Replaces the old "Etsy listing automation" placeholder.
+  - [ ] Migration `0007_assets.sql` — new `assets` table (kind/listing_id/product_brief_id/dimensions/source/cdn_url/fal_request_id). Listing Agent prerequisite per §6 of the spec.
+  - [ ] `gen` + `upscale` tools UPSERT into `assets` in addition to `activity` (per §6).
+  - [ ] `npm run link:asset` CLI for backfilling assets generated outside the system — bunny + planner pre-date the gen tool and need linking before the agent ships (per §6).
+  - [ ] Research Agent **Tuning Pass 2** — schema changes that must ship before the Listing Agent can be built (per §7):
+    - [ ] Promote `audience.persona` to first-class structured field
+    - [ ] Replace `listing.description_angles` with structured `listing.description = { hook, body_sections[], faq[], cta }`
+    - [ ] Replace `listing.etsy_attributes` with semantic `listing.attribute_intent = { style_descriptors, audience_descriptors, occasion_descriptors, color_descriptors, materials_intent }` — Research Agent never enumerates raw store values
+    - [ ] Add `listing.image_spec[]` — explicit slot manifest (hero / lifestyle / what's-included / size-grid / detail) with dims + style notes
+    - [ ] Add `listing.shop_section_suggestion` — single name string
 - [ ] Dashboard on Vercel (Supabase Realtime)
 - [ ] Orchestrator (cadence-driven job scheduling instead of git-push-driven)
 - [ ] Proactive notifications (Telegram bot, daily email digest, weekly strategic brief)

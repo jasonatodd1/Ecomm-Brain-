@@ -2,7 +2,7 @@
 
 > Paste this entire document into a fresh Claude conversation to pick up where the previous one left off. Verify-flagged items (`[VERIFY]`) are values the AI could not confirm from code/Supabase alone and should be re-checked by the operator.
 
-Last updated: 2026-05-21 (Thu, second refresh). Reflects state after the listings monitoring pipeline shipped and opportunity_id wired on both live listings.
+Last updated: 2026-05-21 (Thu, third refresh). Reflects state after `LISTING_AGENT_REQUIREMENTS.md` was written and Tuning Pass 2 prerequisites enumerated.
 
 ---
 
@@ -179,7 +179,7 @@ Root: `brain/`. All paths below are relative to that.
 | Scoring | **Built, MVP validated** | Known scoring-formula ceiling issues — see open data-quality bugs in §7. |
 | Research Agent V1 | **Built + validated** | 5 briefs produced across 2 niches (planneraddicts, general/nursery wall art). Closed-loop with `niche_memory` verified: 4 opportunity gaps from brief v1 were re-confirmed in v2 (`evidence_count=2`). Synthesis prompt has been through tuning pass 1. |
 | Design Agent | **Infra built, agent not yet built** | The image-generation primitives a Design Agent would call now exist and are validated end-to-end (FLUX.2 Pro text-to-image, FLUX.2 Pro edit for image-to-image, Clarity Upscaler for print-resolution enlargement). Both tools are dual-mode — usable as CLI today (`npm run gen`, `npm run upscale`) and importable as `generateImage(opts)` / `upscaleImage(opts)` from an agent tomorrow. Smoke-tested: a 1728×2304 watercolor bunny was generated via FLUX.2 Pro and upscaled to 5008×6680 (print-master size) via Clarity, with the activity log already storing all metadata downstream agents would need. HTML/CSS layouts (planner, listing graphics) are still designed manually in-chat. |
-| Listing Agent | **Not built** | Etsy publish is currently fully manual. Brief → listing copy/photos/tags will be the next pipeline stage once a product is published manually and feedback patterns are observed. |
+| Listing Agent | **Not built — spec'd** | Full requirements in `brain/LISTING_AGENT_REQUIREMENTS.md` (10 sections + worked examples from today's manual publishes). Store-agnostic core + per-store adapters (Etsy → Pinterest → Shopify). Blocked on three prerequisites that doc enumerates: (1) `assets` table + `link:asset` CLI to backfill bunny + planner assets (§6), (2) Research Agent Tuning Pass 2 — promote `audience.persona`, restructure `listing.description`, replace `etsy_attributes` with semantic `attribute_intent`, add `image_spec[]` and `shop_section_suggestion` (§7), (3) live store-schema fetch + caching so attribute values are verified against `possible_values` at runtime (§3, §4 — direct response to today's lesson that Etsy attribute schemas vary by taxonomy and hardcoded recommendations cost edit time). Etsy publish itself is currently fully manual. |
 | Listings Monitoring | **Built + manual** | `seed-listings.ts` + `monitor-listings.ts` running locally on demand. Both live listings seeded, first snapshots captured (see §2 for current numbers). Cron deferred per principle #7 — 3–5 days of manual runs first to confirm baseline (state changes, sold_out, tag edits all behave predictably) before scheduling daily on Railway. The migration (0006) and `listings_stats` time series are ready to absorb cron'd snapshots whenever the operator promotes it. |
 | Customer Service | **Not built** | Blocked on first sale. |
 | Optimization | **Not built** | Blocked on having performance data — but `listings_stats` now starts accumulating that data immediately. After a week of snapshots, even a manual query can answer "views/day per listing" and "favoriting rate," which is the floor of optimization input. |
@@ -237,7 +237,16 @@ Root: `brain/`. All paths below are relative to that.
 
 ### Future (after first sale validation)
 - [ ] Product creation agent (design generation via Recraft/Ideogram/Flux, PDF assembly)
-- [ ] Etsy listing automation (auto-publish, image upload, description, pricing)
+- [ ] **Listing Agent** — full spec in `brain/LISTING_AGENT_REQUIREMENTS.md`. Store-agnostic core + per-store adapters (Etsy first, Pinterest next, Shopify deferred). Replaces the old "Etsy listing automation" placeholder.
+  - [ ] Migration `0007_assets.sql` — new `assets` table (kind/listing_id/product_brief_id/dimensions/source/cdn_url/fal_request_id). Listing Agent prerequisite per §6 of the spec.
+  - [ ] `gen` + `upscale` tools UPSERT into `assets` in addition to `activity` (per §6).
+  - [ ] `npm run link:asset` CLI for backfilling assets generated outside the system — bunny + planner pre-date the gen tool and need linking before the agent ships (per §6).
+  - [ ] Research Agent **Tuning Pass 2** — schema changes that must ship before the Listing Agent can be built (per §7):
+    - [ ] Promote `audience.persona` to first-class structured field
+    - [ ] Replace `listing.description_angles` with structured `listing.description = { hook, body_sections[], faq[], cta }`
+    - [ ] Replace `listing.etsy_attributes` with semantic `listing.attribute_intent = { style_descriptors, audience_descriptors, occasion_descriptors, color_descriptors, materials_intent }` — Research Agent never enumerates raw store values
+    - [ ] Add `listing.image_spec[]` — explicit slot manifest (hero / lifestyle / what's-included / size-grid / detail) with dims + style notes
+    - [ ] Add `listing.shop_section_suggestion` — single name string
 - [ ] Dashboard on Vercel (Supabase Realtime)
 - [ ] Orchestrator (cadence-driven job scheduling instead of git-push-driven)
 - [ ] Proactive notifications (Telegram bot, daily email digest, weekly strategic brief)
@@ -276,6 +285,7 @@ Canonical doc: `brain/PRINCIPLES.md`. Summary of the 10 core architectural princ
 - **Etsy v3 auth format** — `x-api-key` had to switch from `keystring` to `keystring:shared_secret` per Etsy's Feb 9, 2026 change. Fixed in commit `465690d`.
 
 ### Open
+- **Etsy attribute schemas vary by taxonomy node** (lesson from publishing 2026-05-21). Recipient property doesn't exist on the Digital Prints taxonomy that the bunny landed under; Materials is constrained-vocabulary on the planner taxonomy and rejected free-text values like "Digital Download" / "PDF". This is a permanent design constraint, not a transient bug: any spec that tries to encode store attribute values at design time (including the Research Agent's current `etsy_attributes` field) will be wrong some non-trivial fraction of the time. Captured as the central motivation for `LISTING_AGENT_REQUIREMENTS.md` §3, §4, and the Tuning Pass 2 `attribute_intent` schema in §7.
 - **`monitor-listings.ts` cron is intentionally deferred.** Per principle #7 ("build, validate, automate"), the monitor runs manually for 3–5 days before getting scheduled on Railway. Two snapshots in `listings_stats` so far (both from the same operator-triggered run on 2026-05-21). Once a few daily runs land cleanly, this is the most immediate cron candidate.
 - **`FAL_KEY` not yet in Railway Variables.** Only in local `.env.local`. Any deployed job that imports `src/lib/fal.ts` will fail at module-load until this is added. Doesn't affect current cron-less, manual-only deploys, but worth knowing before any agent or job (including a future cron'd `monitor-listings`) starts depending on fal-side work.
 - **RLS disabled on 3 tables** — `agent_config`, `agent_runs`, `product_briefs`. Server-write-only by current design, but flagged by Supabase advisor. Not a live exposure unless the anon key ever leaks. Decision deferred until dashboard work begins.
