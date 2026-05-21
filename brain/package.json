@@ -18,6 +18,7 @@
     "resize:print": "tsx src/tools/resize-print-variants.ts",
     "render:graphic": "tsx src/render/render-graphic.ts",
     "gen": "tsx src/tools/generate-image.ts",
+    "upscale": "tsx src/tools/upscale-image.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

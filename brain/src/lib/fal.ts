@@ -212,6 +212,34 @@ export function buildAutoOutputPath(
 }
 
 /**
+ * Auto-generate an output path for an upscaled image.
+ * Format: dist/gen/YYYY-MM-DD-HHMM-<input-stem>-upscaled-<scale>x.<ext>
+ *
+ * Uses the input filename's stem rather than a prompt slug, since the prompt
+ * for upscalers is just quality-steering text ("masterpiece, best quality")
+ * and not a meaningful descriptor of the asset.
+ */
+export function buildUpscaleOutputPath(
+  inputPath: string,
+  scale: number,
+  ext: 'png' | 'jpg' = 'png'
+): string {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const ts =
+    `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}` +
+    `-${pad(now.getHours())}${pad(now.getMinutes())}`;
+  const stem = (path.parse(inputPath).name || 'image')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .slice(0, 40)
+    .replace(/^-+|-+$/g, '') || 'image';
+  // 2 -> "2", 2.9 -> "2.9", 2.95 -> "2.95"
+  const scaleStr = Number(scale.toFixed(2)).toString();
+  return path.join('dist', 'gen', `${ts}-${stem}-upscaled-${scaleStr}x.${ext}`);
+}
+
+/**
  * Inject a 1-based numeric index into an explicit output path when count>1.
  *   foo.png + (index=2, count=4) -> foo-02.png
  * When count<=1, returns basePath unchanged.
