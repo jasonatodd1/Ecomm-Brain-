@@ -37,6 +37,19 @@ The agent never reads from the filesystem outside the `assets` registry and neve
 
 **Caching:** taxonomy + properties responses are cached in Supabase (new table `store_schema_cache(store, endpoint, response_jsonb, fetched_at, ttl_seconds)`; TTL ≥ 24h for taxonomy, ≥ 7d for property schemas). The agent invalidates the cache and refetches whenever a publish 4xx response surfaces an `invalid attribute` error, then retries once.
 
+### Competitive SEO scoring is a separate concern
+
+The store-schema fetches above answer "what attribute slots exist and what values are allowed?" — a per-listing publish-time question. The orthogonal question "how good is this listing's SEO?" is owned by a separate shared library, `brain/src/lib/etsy-seo-scoring.ts`, fully specified in `brain/COMPETITIVE_SEO_SCORING.md`.
+
+The Listing Agent is a **downstream consumer** of that scoring engine, not its owner. The engine is shared with the Research Agent (which uses it to detect weak-incumbent keyword opportunities at brief time — see `COMPETITIVE_SEO_SCORING.md` §4). The Listing Agent's specific responsibilities are:
+
+- Score its own draft package via `scoreEtsyListingSeo()` before publish, using the median score of the top 5 incumbents from `brief.competitive_landscape` as the target ceiling (see `COMPETITIVE_SEO_SCORING.md` §5).
+- If the draft scores below the ceiling, iterate with Opus on the specific `weak_areas` returned by the scorer (max 2 retry passes recorded in `agent_runs.metadata.draft_iterations[]`).
+- If iteration cannot close the gap, block publish and escalate via a `decision_needed` row rather than ship a draft that loses to incumbents by default.
+- After publish, score every `monitor-listings.ts` snapshot so drift week-over-week becomes visible (see `COMPETITIVE_SEO_SCORING.md` §5 — drift monitoring).
+
+Keeping ownership in the shared lib rather than in the Listing Agent itself is what makes the contract symmetric: the same rubric that scores incumbents in research is the rubric our drafts have to clear at publish.
+
 ### LESSON LEARNED TODAY (2026-05-21)
 
 Etsy attribute schemas **vary by taxonomy node** — sometimes dramatically. Hardcoded recommendations from the brief and from my prior listing-input mapping cost real edit time today:

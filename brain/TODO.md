@@ -31,16 +31,23 @@
 
 ## Future (after first sale validation)
 - [ ] Product creation agent (design generation via Recraft/Ideogram/Flux, PDF assembly)
-- [ ] **Listing Agent** — full spec in `brain/LISTING_AGENT_REQUIREMENTS.md`. Store-agnostic core + per-store adapters (Etsy first, Pinterest next, Shopify deferred). Replaces the old "Etsy listing automation" placeholder.
+- [ ] **Competitive SEO Scoring engine** — full spec in `brain/COMPETITIVE_SEO_SCORING.md`. Shared library `brain/src/lib/etsy-seo-scoring.ts` consumed by BOTH Research Agent (supply-side gap discovery during market analysis) and Listing Agent (pre-publish quality gate + post-publish drift monitoring). Strategic edge: demand × (1/supply quality), not demand alone — turns the brain's market analysis into a competitive-gap detector instead of a demand-only signal.
+  - [ ] Add `brief.competitive_landscape` to `ProductBrief` schema with placeholder shape (top-3 incumbents per keyword) — see `COMPETITIVE_SEO_SCORING.md` §6 step 1. Ships as part of Tuning Pass 2.
+  - [ ] Implement `scoreEtsyListingSeo()` per `COMPETITIVE_SEO_SCORING.md` §2-§3 (10 rules, deterministic, no LLM, pure function). Either end-of-Tuning-Pass-2 or its own milestone before Listing Agent.
+  - [ ] Wire competitive scoring into research synthesis prompt — flag weak-incumbent gaps in `brief.reasoning` (§4).
+  - [ ] Score every `monitor-listings.ts` snapshot and surface week-over-week drift (§5).
+  - [ ] Add `etsy_seo_gap` as a new signal type — only when Listing Agent ships (§6 step 6).
+- [ ] **Listing Agent** — full spec in `brain/LISTING_AGENT_REQUIREMENTS.md`. Store-agnostic core + per-store adapters (Etsy first, Pinterest next, Shopify deferred). Replaces the old "Etsy listing automation" placeholder. Consumes the shared SEO scoring engine above as a downstream consumer per `LISTING_AGENT_REQUIREMENTS.md` §3.
   - [ ] Migration `0007_assets.sql` — new `assets` table (kind/listing_id/product_brief_id/dimensions/source/cdn_url/fal_request_id). Listing Agent prerequisite per §6 of the spec.
   - [ ] `gen` + `upscale` tools UPSERT into `assets` in addition to `activity` (per §6).
   - [ ] `npm run link:asset` CLI for backfilling assets generated outside the system — bunny + planner pre-date the gen tool and need linking before the agent ships (per §6).
-  - [ ] Research Agent **Tuning Pass 2** — schema changes that must ship before the Listing Agent can be built (per §7):
+  - [ ] Research Agent **Tuning Pass 2** — schema changes that must ship before the Listing Agent can be built (per `LISTING_AGENT_REQUIREMENTS.md` §7; also see `COMPETITIVE_SEO_SCORING.md` §6 for sequencing with the scoring engine):
     - [ ] Promote `audience.persona` to first-class structured field
     - [ ] Replace `listing.description_angles` with structured `listing.description = { hook, body_sections[], faq[], cta }`
     - [ ] Replace `listing.etsy_attributes` with semantic `listing.attribute_intent = { style_descriptors, audience_descriptors, occasion_descriptors, color_descriptors, materials_intent }` — Research Agent never enumerates raw store values
     - [ ] Add `listing.image_spec[]` — explicit slot manifest (hero / lifestyle / what's-included / size-grid / detail) with dims + style notes
     - [ ] Add `listing.shop_section_suggestion` — single name string
+    - [ ] Add `listing.competitive_landscape` (per `COMPETITIVE_SEO_SCORING.md` §4) — bundled into Tuning Pass 2 so the schema + the scorer land together
 - [ ] Dashboard on Vercel (Supabase Realtime)
 - [ ] Orchestrator (cadence-driven job scheduling instead of git-push-driven)
 - [ ] Proactive notifications (Telegram bot, daily email digest, weekly strategic brief)
