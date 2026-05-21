@@ -1,2 +1,5 @@
 # Rendered product output — regenerable, do not commit binaries
 products/*/dist/
+# Deliverable bundles (master JPG, sized JPGs, PDFs, transparent PNG) —
+# regenerable from masters via `npm run build:bundle`; do not commit binaries
+products/*/deliverables/

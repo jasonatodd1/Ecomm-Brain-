@@ -36,6 +36,9 @@ export const MODEL_ALIASES: Record<string, string> = {
   'flux-pro-edit':  'fal-ai/flux-2-pro/edit',
   // Upscalers
   'clarity':        'fal-ai/clarity-upscaler',
+  // Background removal — used by the asset bundle pipeline to produce
+  // transparent-PNG deliverables from illustrated source art.
+  'birefnet':       'fal-ai/birefnet/v2',
 };
 
 export function resolveModelId(aliasOrId: string): string {
@@ -58,6 +61,13 @@ export function estimateFluxProCost(width: number, height: number): number {
 // a placeholder estimate and let activity downstream reconcile if needed.
 export function estimateClarityUpscaleCost(_outputWidth: number, _outputHeight: number): number {
   return 0.10; // rough placeholder; revisit when we have billing data
+}
+
+// BiRefNet v2: free per fal pricing page ($0 per compute second). We still
+// return a number for uniform metadata fields downstream so the activity log
+// can carry a `cost_usd` for every fal call without nullability branching.
+export function estimateBirefnetCost(): number {
+  return 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -290,4 +300,96 @@ export function formatFalValidationError(err: unknown): string | null {
     return `fal validation error — ${fieldPath}: ${msg} (got: ${inputStr})`;
   });
   return lines.join('\n');
+}
+
+// ---------------------------------------------------------------------------
+// Background removal (BiRefNet v2)
+// ---------------------------------------------------------------------------
+export interface RemoveBackgroundOptions {
+  /** Input: local path or http(s) URL. Local paths upload to fal CDN first. */
+  input: string;
+  /** Output PNG path. Parent dirs are created. */
+  output: string;
+  /**
+   * BiRefNet model variant. Default: 'General Use (Dynamic)'.
+   *
+   * Dynamic supports resolutions up to 2304×2304 internally and refines
+   * foreground edges with subpixel accuracy — the cleanest result for
+   * watercolor illustrations where the boundary is soft and translucent.
+   * 'General Use (Light)' is BiRefNet's own recommended default but operates
+   * at fixed 1024×1024 which produces visible staircase edges when applied
+   * to >5K-pixel source art.
+   */
+  variant?:
+    | 'General Use (Light)'
+    | 'General Use (Light 2K)'
+    | 'General Use (Heavy)'
+    | 'Matting'
+    | 'Portrait'
+    | 'General Use (Dynamic)';
+  /** Internal operating resolution. Default 2304x2304 (Dynamic-only). */
+  operatingResolution?: '1024x1024' | '2048x2048' | '2304x2304';
+}
+
+export interface RemoveBackgroundResult {
+  outputPath: string;
+  outputUrl: string;
+  falRequestId: string;
+  outputDimensions: { width: number; height: number };
+  variant: string;
+  operatingResolution: string;
+  costUsd: number;
+  durationMs: number;
+}
+
+/**
+ * Remove the background from an image via fal-ai/birefnet/v2 and download
+ * the resulting transparent-PNG to `output`. Pure infra — does NOT write
+ * to the activity table; the caller does that so it can attach product /
+ * deliverable context.
+ */
+export async function removeBackground(
+  opts: RemoveBackgroundOptions
+): Promise<RemoveBackgroundResult> {
+  const startedAt = Date.now();
+  const variant = opts.variant ?? 'General Use (Dynamic)';
+  const operatingResolution = opts.operatingResolution ?? '2304x2304';
+  const modelId = resolveModelId('birefnet');
+
+  const inputUrl = await resolveReferenceImage(opts.input);
+
+  const input: Record<string, unknown> = {
+    image_url: inputUrl,
+    model: variant,
+    operating_resolution: operatingResolution,
+    refine_foreground: true,
+    output_format: 'png',
+  };
+
+  const result = await fal.subscribe(modelId, { input, logs: false });
+
+  const data = result.data as {
+    image?: { url: string; width?: number; height?: number };
+  };
+  if (!data.image?.url) {
+    throw new Error(
+      `removeBackground returned no image for request ${result.requestId}`
+    );
+  }
+
+  await downloadImage(data.image.url, opts.output);
+
+  return {
+    outputPath: opts.output,
+    outputUrl: data.image.url,
+    falRequestId: result.requestId,
+    outputDimensions: {
+      width: data.image.width ?? 0,
+      height: data.image.height ?? 0,
+    },
+    variant,
+    operatingResolution,
+    costUsd: estimateBirefnetCost(),
+    durationMs: Date.now() - startedAt,
+  };
 }

@@ -8,17 +8,16 @@
 - [ ] Run `npm run monitor:listings` daily by hand for 3–5 days before scheduling cron — confirms baseline behavior, surfaces edge cases (state changes, sold_out, tag edits, etc.) per principle #7
 - [ ] First sale (validation milestone) — both listings active, awaiting market signal
 
-### Begin Listing Agent build (Tuning Pass 2 + SEO engine + data layer all green)
+### Begin Listing Agent build (Tuning Pass 2 + SEO engine + asset pipeline + data layer all green)
 - [ ] Migration `0007_assets.sql` (see `LISTING_AGENT_REQUIREMENTS.md` §6)
 - [ ] `gen` + `upscale` tools UPSERT into `assets` in addition to `activity`
 - [ ] `npm run link:asset` CLI for backfilling the bunny + planner assets generated outside the system
-- [ ] Asset pipeline gap decision (see Backlog) — expand-pipeline vs constrain-schema before first agent publish
+- _Asset pipeline gap DONE — `npm run build:bundle` now produces the full deliverable set every v2 brief promises (master JPG + sized JPGs + print-bundle PDF + transparent PNG + ratio-guide PDF). Listing Agent has nothing to backfill or discover._
 
 ## Data-Quality Bugs (open)
 - _All three fixed; see "Data-Quality Bug Fixes" section in Done._
 
 ## Backlog (committed, deferred)
-- [ ] **Asset pipeline gap (Listing Agent prerequisite).** v2 bunny brief claims deliverables that the current `resize-print-variants.ts` pipeline does NOT yet produce: master JPG at 300 DPI sized for all 5 print sizes (have JPGs but not packaged as one master + ratio guide), PDF with crop marks (not built), transparent PNG for layered/digital use (not built), 1-page print & ratio guide PDF (not built). Decide before the Listing Agent first publishes: either (a) expand `resize-print-variants.ts` + add `package-deliverables.ts` to produce the full claimed set, OR (b) constrain the brief schema (Research Agent's `whats_included`) to only claim files the pipeline produces today. Tracking item — no code action yet, but flag before Listing Agent ships.
 - [ ] Drop dead keywords from seed list (digital planner, printable wall art, custom invitation template); investigate or remove gratitude journal printable (SerpApi failure case)
 - [ ] `expense.ts` utility for programmatic cost logging (no more raw SQL inserts)
 - [ ] Per-provider cost caps with daily limits (runaway-spend guardrail)
@@ -42,8 +41,8 @@
   - [ ] Migration `0007_assets.sql` — new `assets` table (kind/listing_id/product_brief_id/dimensions/source/cdn_url/fal_request_id). Listing Agent prerequisite per §6 of the spec.
   - [ ] `gen` + `upscale` tools UPSERT into `assets` in addition to `activity` (per §6).
   - [ ] `npm run link:asset` CLI for backfilling assets generated outside the system — bunny + planner pre-date the gen tool and need linking before the agent ships (per §6).
-  - [ ] Asset pipeline gap (see Backlog) — decide expand-pipeline vs constrain-schema before first agent publish.
   - _Research Agent Tuning Pass 2 prerequisite is DONE (shipped in the `tune research agent (pass 2)` commit)._
+  - _Asset pipeline gap prerequisite is DONE (shipped in the `expand asset pipeline` commit); `npm run build:bundle` produces the full deliverable set._
 - [ ] Dashboard on Vercel (Supabase Realtime)
 - [ ] Orchestrator (cadence-driven job scheduling instead of git-push-driven)
 - [ ] Proactive notifications (Telegram bot, daily email digest, weekly strategic brief)
@@ -95,7 +94,11 @@
 - [x] Code-based PDF rendering (Puppeteer + HTML/CSS) for HillwardStudio A5 monthly planner — `npm run render:planner`
 - [x] 28-page A5 planner template authored: cover + 24 monthly spreads + 3 notes pages; v3 with SVG dot grid, editorial cover, weekend tint, priorities sidebar
 - [x] `render-graphic.ts` + `npm run render:graphic` — generic HTML → PNG/JPEG screenshot tool (format auto-detected from output extension; JPEG quality 92)
-- [x] `resize-print-variants.ts` + `npm run resize:print` — 5 print sizes (8×10, 11×14, 16×20, 18×24, 24×36) from a 5008×6680 master via `sharp.extract`
+- [x] `resize-print-variants.ts` + `npm run resize:print` — 5 print sizes (8×10, 11×14, 16×20, 18×24, 24×36) from a 5008×6680 master via `sharp.extract`. Now delegates to the shared `src/lib/print-bundle.ts` lib (single source of truth for `PRINT_SIZES`, crop coords, and sharp ops).
+- [x] **Full deliverable bundle (`build-print-bundle.ts` + `npm run build:bundle`).** Reads a master image and produces every artifact a v2 wall-art brief promises a buyer: master JPG at 300 DPI + 5 sized JPG variants in `sized/` + multi-page print-bundle PDF with crop marks at each trim corner + transparent PNG (background removed via `fal-ai/birefnet/v2` at the Dynamic 2304×2304 variant with `refine_foreground=true`; output preserves full 5008×6680 input resolution) + single-page ratio-guide PDF (US Letter, legend with all 5 sizes + ratios + frame recommendations + scale comparison diagram). Outputs land at `products/<slug>/deliverables/` (gitignored — binaries). One `activity` row per deliverable (`agent='product', action='asset.built'`) carrying kind / path / size / duration / cost / per-kind metadata. Smoke-tested 2026-05-21: bunny pipeline ran in 41.7s end-to-end, $0.00 fal cost (birefnet is free), 140.2 MB total, transparent PNG corners verified fully transparent (alpha=0).
+- [x] Shared `src/lib/print-bundle.ts` library — pure-function builders (`buildMasterJpg`, `buildSizedJpgVariants`, `buildPrintBundlePdf`, `buildRatioGuidePdf`) + canonical `PRINT_SIZES` catalog with imperial trim dims, source-pixel crop coords, and ratio labels. PDFs built via `pdf-lib`.
+- [x] `fal.ts` extended with `birefnet` model alias (`fal-ai/birefnet/v2`), `estimateBirefnetCost()` (returns 0 — fal's pricing page lists this model as free), and `removeBackground(opts)` helper that uploads input, calls fal, downloads the transparent PNG.
+- [x] `ProductBrief.product.format.deliverables[]` schema field (enum kinds: `master_jpg | sized_jpg_set | print_bundle_pdf | transparent_png | ratio_guide_pdf`) added in Tuning Pass 2 follow-up. Legacy `includes` free-text preserved for buyer-facing copy. Listing Agent will verify every entry against `products/<slug>/deliverables/` before publishing — closes the "brief claims something the pipeline can't produce" gap.
 
 ### Infrastructure
 - [x] Supabase project with 12 tables (signals, opportunities, listings, listings_stats, activity, decisions_needed, niche_memory, system_state, cost_log, agent_config, agent_runs, product_briefs) + RLS enabled on the core 8

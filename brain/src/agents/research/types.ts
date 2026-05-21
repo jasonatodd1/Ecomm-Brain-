@@ -34,7 +34,43 @@ export type ProductBrief = {
       sizes: string[];
       orientation: 'portrait' | 'landscape' | 'both';
       page_count: number;
+      /**
+       * Free-text list of what's included, as it reads on the Etsy listing.
+       * Legacy v1 field; preferred for buyer-facing copy. Listing Agent
+       * still emits this verbatim. To match brief claims against what the
+       * asset pipeline can actually produce on disk, also populate
+       * `deliverables` (added in Tuning Pass 2).
+       */
       includes: string[];
+      /**
+       * Structured deliverable manifest — added in Tuning Pass 2.
+       * Each entry names a known artifact kind the asset pipeline can
+       * deterministically produce (see `brain/src/tools/build-print-bundle.ts`
+       * and `brain/src/lib/print-bundle.ts`). The Listing Agent uses this
+       * to verify, before publishing, that every claimed deliverable
+       * actually exists on disk under `products/<slug>/deliverables/`.
+       *
+       * Kinds (current pipeline produces all of these for ≥5008×6680 masters):
+       *   - 'master_jpg'        — full-resolution print-ready JPG at 300 DPI
+       *   - 'sized_jpg_set'     — the 5 imperial print sizes (8×10…24×36)
+       *   - 'print_bundle_pdf'  — multi-page PDF with crop marks per size
+       *   - 'transparent_png'   — background-removed PNG via fal birefnet/v2
+       *   - 'ratio_guide_pdf'   — single-page sizes + ratios + frame reference
+       *
+       * Optional in the type for back-compat with the first 5 (v1) briefs.
+       * v2+ wall-art briefs should populate this whenever they want the
+       * pipeline-as-contract guarantee.
+       */
+      deliverables?: Array<{
+        kind:
+          | 'master_jpg'
+          | 'sized_jpg_set'
+          | 'print_bundle_pdf'
+          | 'transparent_png'
+          | 'ratio_guide_pdf';
+        /** Optional one-line description shown in the brief renderer. */
+        description?: string;
+      }>;
     };
     design: {
       style: string;
