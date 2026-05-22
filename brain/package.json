@@ -20,6 +20,7 @@
     "resize:print": "tsx src/tools/resize-print-variants.ts",
     "build:bundle": "tsx src/tools/build-print-bundle.ts",
     "render:graphic": "tsx src/render/render-graphic.ts",
+    "refine:graphic": "tsx src/tools/refine-graphic.ts",
     "gen": "tsx src/tools/generate-image.ts",
     "upscale": "tsx src/tools/upscale-image.ts",
     "link:asset": "tsx src/tools/link-asset.ts",

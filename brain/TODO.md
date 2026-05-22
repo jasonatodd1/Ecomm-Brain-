@@ -14,6 +14,13 @@
 - [ ] **Description reconciliation (bunny):** analysis complete — brief v2 description wins on SEO (94% vs 73%) and structure; apply manually with deliverables corrected to **5 JPGs only** (8×10–24×36). See commit report / chat for per-section verdict.
 - [ ] Decide Phase 2 OAuth + auto-publish gate (per principle #7: N≥5 clean previews approved without edits before `--publish` becomes default per taxonomy).
 
+### Design Agent + visual loop (capability test shipped 2026-05-22)
+- [x] **`refine:graphic` loop** — render → vision critique → revise → re-render; keep-best-so-far; parse robustness. See `DESIGN_AGENT_REQUIREMENTS.md`.
+- [x] **Bunny size guide v2** — hand-built couch scale reference (`sofa.svg`), 13 px/in honest scale, `size_grid` PNG re-rendered. Full spec in `DESIGN_AGENT_REQUIREMENTS.md` §7.
+- [ ] **Locked-asset injection** — render-time includes so the loop cannot redraw curated SVGs (blocker for autonomous refine).
+- [ ] **Few-shot critic anchoring** — known-good/bad reference PNGs in vision prompt (blocker for autonomous refine).
+- [ ] **Design Agent v1** — brief `image_spec` → template select → fill → render → optional refine → `link:asset`. See `DESIGN_AGENT_REQUIREMENTS.md`.
+
 ## Data-Quality Bugs (open)
 - _All three fixed; see "Data-Quality Bug Fixes" section in Done._
 
@@ -54,7 +61,7 @@
 ## Done
 
 ### Bunny size-guide listing photo (`feat: bunny size-guide listing photo` commit)
-- [x] **`size-guide.html`** — programmatic size comparison graphic matching `whats-included.html` visual language (cream `#EDE8E1`, sage `#6B7F5E` frame strokes, Inter typography, HillwardStudio header/footer). Five print sizes drawn to scale (7 px/in) nested bottom-left; standard crib silhouette (53″ wide) as honest scale reference. Rendered via `npm run render:graphic` → `listing-photos/size-guide.png` (2000×2000). Registered as `size_grid` asset. Bunny Listing Agent manifest now **5/5 ready**.
+- [x] **`size-guide.html`** — programmatic size comparison graphic matching `whats-included.html` visual language (cream `#EDE8E1`, sage `#6B7F5E`, Inter typography, HillwardStudio header/footer). **v2 (2026-05-22):** couch scale reference via `templates/assets/furniture/sofa.svg`, 13 px/in honest scale, hand-built (loop not trusted for curated assets). Rendered → `listing-photos/size-guide.png` (2000×2000). Registered as `size_grid`. See `DESIGN_AGENT_REQUIREMENTS.md`.
 
 ### Bunny listing photos registered (`chore: register bunny's 6 listing photos + add artwork_flat asset kind` commit)
 - [x] **6 listing photos** saved to `products/hillward-nursery-bunny/listing-photos/` and registered in `assets` (5 new rows + 1 whats_included path update). Mapping: `hero.jpg` (primary shelf mockup), `lifestyle-crib.jpg`, `lifestyle-corner.jpg`, `lifestyle-shelf.jpg` → `lifestyle_detail` (no console shot was in attachments — 6th attachment was a planner page, ignored), `artwork-flat.jpg` (from master source), `whats-included.png` (updated existing row from `dist/whats-included.png`). New asset kind `artwork_flat` via migration `0008_assets_artwork_flat.sql`.

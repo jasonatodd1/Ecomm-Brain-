@@ -20,11 +20,11 @@
       -webkit-print-color-adjust: exact;
     }
     .container {
-      width: 1600px;
+      width: 1800px;
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 48px;
+      gap: 28px;
     }
     .eyebrow {
       font-size: 26px;
@@ -39,7 +39,7 @@
       background: #A89F92;
     }
     .title {
-      font-size: 72px;
+      font-size: 88px;
       font-weight: 300;
       letter-spacing: -0.02em;
       color: #2E2A26;
@@ -50,19 +50,17 @@
       width: 100%;
       display: flex;
       justify-content: center;
-      padding: 8px 0 0;
-    }
-    .diagram-wrap svg {
-      display: block;
+      align-items: flex-end;
     }
     .caption {
       font-size: 28px;
       font-weight: 400;
       color: #6B6357;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.03em;
       text-align: center;
-      line-height: 1.55;
-      max-width: 1100px;
+      line-height: 1.65;
+      max-width: 1800px;
+      white-space: nowrap;
     }
     .brand {
       font-size: 20px;
@@ -70,145 +68,124 @@
       letter-spacing: 0.45em;
       text-transform: uppercase;
       color: #A89F92;
-      margin-top: 8px;
+      margin-top: 4px;
     }
   </style>
 </head>
 <body>
-  <!--
-    Scale: 7 px per inch — all frame outlines and crib silhouette share one
-    coordinate system so relative proportions are honest.
-    Crib reference: ~53" wide × ~28" tall (standard full-size rail silhouette).
-  -->
   <div class="container">
     <div class="eyebrow">HillwardStudio</div>
     <div class="rule"></div>
-    <div class="title">Size<br>Guide</div>
+    <div class="title">Size Guide</div>
 
     <div class="diagram-wrap">
-      <svg width="920" height="620" viewBox="0 0 920 620" xmlns="http://www.w3.org/2000/svg" aria-label="Print size comparison with crib scale reference">
+      <!--
+        Single scale: 13 px per inch (sofa + all frames).
+
+        Sofa: 84″ × 32″ → 1092 × 416 px, centered; leg bottoms at y ≈ 928
+        Frame row: shared bottom baseline y = 476 (48 px above sofa top)
+
+        Frame sizes (portrait w×h inches → px):
+          8×10  → 104×130
+          11×14 → 143×182
+          16×20 → 208×260
+          18×24 → 234×312
+          24×36 → 312×468
+
+        Asset: templates/assets/furniture/sofa.svg (inlined below)
+      -->
+      <svg viewBox="0 0 1800 980" width="1800" height="980"
+           xmlns="http://www.w3.org/2000/svg"
+           aria-label="Five print sizes compared to a standard sofa">
         <defs>
           <style>
-            .frame {
+            .frame-rect {
+              fill: rgba(107,127,94,0.14);
+              stroke: #6B7F5E;
+              stroke-width: 3.5;
+            }
+            .furniture {
+              fill: rgba(107,127,94,0.14);
+              stroke: #6B7F5E;
+              stroke-width: 0.27;
+              stroke-linejoin: round;
+            }
+            .furniture-detail {
               fill: none;
               stroke: #6B7F5E;
-              stroke-width: 2.5;
-            }
-            .frame-inner {
-              fill: rgba(107, 127, 94, 0.06);
-              stroke: #6B7F5E;
-              stroke-width: 2.5;
-            }
-            .label {
-              font-family: 'Inter', sans-serif;
-              font-size: 15px;
-              font-weight: 500;
-              fill: #2E2A26;
-              letter-spacing: 0.08em;
-            }
-            .label-sub {
-              font-family: 'Inter', sans-serif;
-              font-size: 11px;
-              font-weight: 400;
-              fill: #6B6357;
-              letter-spacing: 0.06em;
-            }
-            .crib-line {
-              fill: none;
-              stroke: #8A7A5C;
-              stroke-width: 2.5;
+              stroke-width: 0.32;
+              opacity: 0.55;
               stroke-linecap: round;
-              stroke-linejoin: round;
             }
-            .crib-fill {
-              fill: rgba(138, 122, 92, 0.08);
-              stroke: #8A7A5C;
-              stroke-width: 2.5;
-              stroke-linejoin: round;
-            }
-            .floor {
-              stroke: #C9B79C;
-              stroke-width: 1;
-              stroke-dasharray: 4 6;
-            }
-            .guide-text {
+            .lbl {
               font-family: 'Inter', sans-serif;
-              font-size: 12px;
+              font-weight: 500;
+              fill: #3A3530;
+              text-anchor: middle;
+              dominant-baseline: middle;
+            }
+            .ref-label {
+              font-family: 'Inter', sans-serif;
               font-weight: 400;
-              fill: #A89F92;
-              letter-spacing: 0.12em;
-              text-transform: uppercase;
+              fill: #8A7A6A;
+              text-anchor: middle;
+              dominant-baseline: middle;
+            }
+            .floor-line {
+              stroke: #C4B49A;
+              stroke-width: 2;
             }
           </style>
         </defs>
 
-        <!-- Floor line -->
-        <line class="floor" x1="60" y1="500" x2="860" y2="500" />
+        <!-- Floor line at leg bottoms (viewBox y=31 → 524 + 31/32×416 ≈ 927) -->
+        <line class="floor-line" x1="320" y1="928" x2="1480" y2="928"/>
 
-        <!-- Nested frames — shared bottom-left corner at (180, 500), 7 px/in -->
-        <!-- 24×36 -->
-        <rect class="frame" x="180" y="248" width="168" height="252" rx="2" />
-        <text class="label" x="192" y="268">24×36″</text>
-        <text class="label-sub" x="192" y="284">statement</text>
+        <!-- ═══ FRAMES (ascending left → right, shared baseline y = 476) ═══ -->
 
-        <!-- 18×24 -->
-        <rect class="frame" x="180" y="332" width="126" height="168" rx="2" />
-        <text class="label" x="192" y="350">18×24″</text>
+        <rect class="frame-rect" x="360" y="346" width="104" height="130" rx="4"/>
+        <text class="lbl" font-size="22" x="412" y="404">8×10″</text>
 
-        <!-- 16×20 -->
-        <rect class="frame" x="180" y="360" width="112" height="140" rx="2" />
-        <text class="label" x="192" y="376">16×20″</text>
+        <rect class="frame-rect" x="484" y="294" width="143" height="182" rx="4"/>
+        <text class="lbl" font-size="24" x="555" y="376">11×14″</text>
 
-        <!-- 11×14 -->
-        <rect class="frame" x="180" y="402" width="77" height="98" rx="2" />
-        <text class="label" x="188" y="418">11×14″</text>
+        <rect class="frame-rect" x="647" y="216" width="208" height="260" rx="4"/>
+        <text class="lbl" font-size="26" x="751" y="334">16×20″</text>
 
-        <!-- 8×10 -->
-        <rect class="frame-inner" x="180" y="430" width="56" height="70" rx="2" />
-        <text class="label" x="188" y="446">8×10″</text>
-        <text class="label-sub" x="188" y="460">shelf</text>
+        <rect class="frame-rect" x="875" y="164" width="234" height="312" rx="4"/>
+        <text class="lbl" font-size="28" x="992" y="308">18×24″</text>
 
-        <!-- Crib silhouette — 53×28 in at 7 px/in = 371×196, centered under 24×36 -->
-        <!-- 24×36 center x = 180 + 84 = 264; crib center aligned -->
-        <g transform="translate(78, 500)">
-          <!-- mattress rail body -->
-          <rect class="crib-fill" x="0" y="0" width="371" height="196" rx="6" />
-          <!-- headboard -->
-          <path class="crib-line" d="M 0 196 L 0 52 Q 0 28 28 28 L 48 28 Q 68 28 68 52 L 68 196" />
-          <!-- footboard -->
-          <path class="crib-line" d="M 371 196 L 371 52 Q 371 28 343 28 L 323 28 Q 303 28 303 52 L 303 196" />
-          <!-- top rail -->
-          <line class="crib-line" x1="68" y1="28" x2="303" y2="28" />
-          <!-- vertical slats (simplified) -->
-          <line class="crib-line" x1="110" y1="28" x2="110" y2="196" />
-          <line class="crib-line" x1="148" y1="28" x2="148" y2="196" />
-          <line class="crib-line" x1="186" y1="28" x2="186" y2="196" />
-          <line class="crib-line" x1="224" y1="28" x2="224" y2="196" />
-          <line class="crib-line" x1="262" y1="28" x2="262" y2="196" />
-          <text class="guide-text" x="186" y="228" text-anchor="middle">standard crib · 53″ wide</text>
-        </g>
+        <rect class="frame-rect" x="1129" y="8" width="312" height="468" rx="4"/>
+        <text class="lbl" font-size="32" x="1285" y="226">24×36″</text>
 
-        <!-- Height callouts on the right -->
-        <g font-family="Inter, sans-serif">
-          <line stroke="#C9B79C" stroke-width="1" x1="400" y1="248" x2="430" y2="248" />
-          <line stroke="#C9B79C" stroke-width="1" x1="400" y1="500" x2="430" y2="500" />
-          <line stroke="#C9B79C" stroke-width="1" x1="430" y1="248" x2="430" y2="500" />
-          <text class="label-sub" x="442" y="378" transform="rotate(-90 442 378)">24×36 above crib</text>
-
-          <line stroke="#C9B79C" stroke-width="1" x1="400" y1="430" x2="520" y2="430" />
-          <line stroke="#C9B79C" stroke-width="1" x1="520" y1="430" x2="520" y2="500" />
-          <text class="label-sub" x="528" y="472">8×10 shelf scale</text>
-        </g>
-
-        <!-- Legend -->
-        <text class="guide-text" x="180" y="560">all sizes drawn to scale · 7 px = 1 inch</text>
+        <!-- ═══ SOFA (templates/assets/furniture/sofa.svg) ═══ -->
+        <svg x="354" y="524" width="1092" height="416" viewBox="0 0 84 32" aria-hidden="true">
+          <path class="furniture" d="
+            M 0 28
+            L 84 28
+            L 84 14.8
+            L 84 3
+            Q 84 2.5 83 2.5
+            L 1 2.5
+            Q 0 2.5 0 3
+            L 0 14.8
+            Z
+          "/>
+          <rect class="furniture" x="2" y="28" width="3.2" height="3" rx="0.35"/>
+          <rect class="furniture" x="30.4" y="28" width="3.2" height="3" rx="0.35"/>
+          <rect class="furniture" x="50.4" y="28" width="3.2" height="3" rx="0.35"/>
+          <rect class="furniture" x="78.8" y="28" width="3.2" height="3" rx="0.35"/>
+          <path class="furniture-detail" d="M 0 14.8 H 84 M 28 14.8 V 28 M 56 14.8 V 28"/>
+          <path class="furniture" d="M 0 14.8 L 0 9.8 Q 0 8.2 1.4 8.2 L 4.6 8.2 Q 6 8.2 6 9.8 L 6 14.8 Z"/>
+          <path class="furniture" d="M 78 14.8 L 78 9.8 Q 78 8.2 79.4 8.2 L 82.6 8.2 Q 84 8.2 84 9.8 L 84 14.8 Z"/>
+        </svg>
+        <text class="ref-label" font-size="24" x="900" y="968">Standard sofa · 84″ wide</text>
       </svg>
     </div>
 
     <div class="caption">
-      Five sizes to fit any wall — from a cozy 8×10 shelf piece to a 24×36 statement above the crib.
+      Five sizes to fit any wall — see how each compares to a standard sofa for real-world scale.
     </div>
-
     <div class="rule"></div>
     <div class="brand">Vintage Bunny Nursery Print</div>
   </div>
