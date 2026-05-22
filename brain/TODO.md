@@ -9,8 +9,7 @@
 - [ ] First sale (validation milestone) — both listings active, awaiting market signal
 
 ### Use the Listing Agent (just shipped) on real briefs
-- [x] Generate marketing assets for the bunny's listing photos — 6 fal UI photos registered in `products/hillward-nursery-bunny/listing-photos/` (hero, 2× lifestyle, lifestyle_detail, artwork_flat, whats_included). Image manifest now 4/5 ready (only `size_grid` still missing).
-- [ ] Generate `size_grid` asset for the bunny (nested print-size comparison graphic).
+- [x] Generate marketing assets for the bunny's listing photos — 6 fal UI photos + programmatic size guide registered in `products/hillward-nursery-bunny/listing-photos/`. **Image manifest 5/5 ready** (hero, lifestyle, whats_included, size_grid, lifestyle_detail).
 - [ ] Generate marketing assets for the planner's 5 missing image slots (all of them — only the source PDF is registered today).
 - [ ] **Description reconciliation (bunny):** analysis complete — brief v2 description wins on SEO (94% vs 73%) and structure; apply manually with deliverables corrected to **5 JPGs only** (8×10–24×36). See commit report / chat for per-section verdict.
 - [ ] Decide Phase 2 OAuth + auto-publish gate (per principle #7: N≥5 clean previews approved without edits before `--publish` becomes default per taxonomy).
@@ -54,9 +53,12 @@
 
 ## Done
 
+### Bunny size-guide listing photo (`feat: bunny size-guide listing photo` commit)
+- [x] **`size-guide.html`** — programmatic size comparison graphic matching `whats-included.html` visual language (cream `#EDE8E1`, sage `#6B7F5E` frame strokes, Inter typography, HillwardStudio header/footer). Five print sizes drawn to scale (7 px/in) nested bottom-left; standard crib silhouette (53″ wide) as honest scale reference. Rendered via `npm run render:graphic` → `listing-photos/size-guide.png` (2000×2000). Registered as `size_grid` asset. Bunny Listing Agent manifest now **5/5 ready**.
+
 ### Bunny listing photos registered (`chore: register bunny's 6 listing photos + add artwork_flat asset kind` commit)
 - [x] **6 listing photos** saved to `products/hillward-nursery-bunny/listing-photos/` and registered in `assets` (5 new rows + 1 whats_included path update). Mapping: `hero.jpg` (primary shelf mockup), `lifestyle-crib.jpg`, `lifestyle-corner.jpg`, `lifestyle-shelf.jpg` → `lifestyle_detail` (no console shot was in attachments — 6th attachment was a planner page, ignored), `artwork-flat.jpg` (from master source), `whats-included.png` (updated existing row from `dist/whats-included.png`). New asset kind `artwork_flat` via migration `0008_assets_artwork_flat.sql`.
-- [x] **Registry count for bunny listing:** 16 assets total — hero×1, lifestyle×2, lifestyle_detail×1, artwork_flat×1, whats_included×1, source_file×1, master×1, print_variant×5, transparent×1, crop_marks_pdf×1, ratio_guide×1. Listing Agent image manifest: **4/5 ready** (hero, lifestyle, whats_included, lifestyle_detail ready; size_grid still missing).
+- [x] **Registry count for bunny listing:** 17 assets total — listing-photos set complete (hero, 2× lifestyle, lifestyle_detail, artwork_flat, whats_included, size_grid) + deliverables + source_file. Listing Agent image manifest: **5/5 ready**.
 
 ### Listing Agent v1 (`feat: Listing Agent v1` commit)
 - [x] **Etsy taxonomy + attribute infrastructure** (`brain/src/lib/etsy-taxonomy.ts`, `brain/src/lib/attribute-mapping.ts`). `getTaxonomyNodes()` + `getTaxonomyProperties(id)` with file-based cache under `dist/.cache/etsy-taxonomy/` (24h TTL nodes / 7d properties) + in-memory cache per process; `mapBreadcrumbToTaxonomyId(crumbs)` with parent-fallback (logs `taxonomy.fallback_to_parent` when the brief's category breadcrumb doesn't match the live tree exactly). `mapSemanticToAllowed(descriptors, property)` implements `LISTING_AGENT_REQUIREMENTS.md` §4 — tier 1 exact normalized equality → tier 2 whole-token containment → tier 3 curated semantic-substitution map (cottagecore→country, scandinavian→minimalist, "digital download"→Paper, etc.) → null. Never force-picks. `mapSemanticToAllowedMany` handles multi-valued properties (Etsy Occasion, Material multi, Art subject, Holiday) with value-id dedupe.
