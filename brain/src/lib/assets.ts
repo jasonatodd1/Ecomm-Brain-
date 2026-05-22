@@ -17,6 +17,7 @@ export type AssetKind =
   | 'whats_included'
   | 'size_grid'
   | 'lifestyle_detail'
+  | 'artwork_flat'
   | 'source_file'
   | 'print_variant'
   | 'master'
@@ -40,6 +41,7 @@ export const ASSET_KINDS: readonly AssetKind[] = [
   'whats_included',
   'size_grid',
   'lifestyle_detail',
+  'artwork_flat',
   'source_file',
   'print_variant',
   'master',

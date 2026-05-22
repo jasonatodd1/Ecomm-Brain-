@@ -2,7 +2,7 @@
 
 > Paste this entire document into a fresh Claude conversation to pick up where the previous one left off. Verify-flagged items (`[VERIFY]`) are values the AI could not confirm from code/Supabase alone and should be re-checked by the operator.
 
-Last updated: 2026-05-22 (Fri, ninth refresh). Reflects state after the **Listing Agent v1** commit (Etsy package generator + taxonomy-aware attribute mapping + pre-publish SEO gate). The full agent shipped against both v2 briefs: bunny `a70b9002` scored 91% SEO (beats 66% incumbent benchmark by 25 pts), planner `535b3e36` scored 97% (beats 68% by 29 pts), both Opus-free (deterministic draft already beat benchmark — total cost $0.00). The package generator runs via `npm run list:package -- --brief-id=<uuid> [--listing-id=<uuid>]` and writes a self-contained operator-review markdown to `brain/packages/<date>-<brief_id>-etsy.md`. Phase 2 (OAuth + auto-publish) is intentionally deferred — v1 ships pasteable artifacts a human reviews.
+Last updated: 2026-05-22 (Fri, tenth refresh). Reflects state after **bunny listing photos registered** (`chore: register bunny's 6 listing photos + add artwork_flat asset kind`) — 16 assets for the bunny listing, Listing Agent image manifest 4/5 ready. Description reconciliation analysis done (brief wins; manual Etsy paste pending with deliverables fix).
 
 ---
 
@@ -53,7 +53,7 @@ URLs: [`hillwardstudio.etsy.com/listing/4508059444`](https://hillwardstudio.etsy
   - `product_briefs` (5) — Research Agent output
   - `listings` (2) — live Etsy listings (mirror columns extended in migration 0006: `views`, `num_favorers`, `etsy_state`, `tags`, `etsy_last_modified_at`, `last_snapshot_at`)
   - `listings_stats` (2) — **new in migration 0006.** Append-only time series of every snapshot. Includes `raw` jsonb with the full Etsy response for future-proofing. Indexed on `(listing_id, snapshot_at DESC)` and `(snapshot_at DESC)`.
-  - `assets` (12) — **new in migration 0007.** Queryable asset registry. Columns: `kind` (CHECK over 11 values: hero / lifestyle / whats_included / size_grid / lifestyle_detail / source_file / print_variant / master / transparent / ratio_guide / crop_marks_pdf), `listing_id` (FK → `listings.id`, nullable), `product_brief_id` (FK → `product_briefs.id`, nullable), `local_path`, `cdn_url`, `width`, `height`, `source` (CHECK over 8 values: fal_generated / fal_upscaled / fal_ui / render_graphic / resize_print / render_planner / build_bundle / manual_upload), `fal_request_id`, `metadata` (jsonb default `{}`). Indexes on `(listing_id) WHERE NOT NULL`, `(product_brief_id) WHERE NOT NULL`, and composite `(kind, listing_id)`. Backfill: bunny 11 assets (1 source_file + 9 deliverables + 1 whats_included) + planner 1 asset (source_file PDF).
+  - `assets` (16 for bunny) — **new in migration 0007**, extended migration **0008** adds `artwork_flat` kind. Columns: `kind` (CHECK over 12 values: hero / lifestyle / whats_included / size_grid / lifestyle_detail / **artwork_flat** / source_file / print_variant / master / transparent / ratio_guide / crop_marks_pdf), `listing_id` (FK → `listings.id`, nullable), `product_brief_id` (FK → `product_briefs.id`, nullable), `local_path`, `cdn_url`, `width`, `height`, `source` (CHECK over 8 values: fal_generated / fal_upscaled / fal_ui / render_graphic / resize_print / render_planner / build_bundle / manual_upload), `fal_request_id`, `metadata` (jsonb default `{}`). Indexes on `(listing_id) WHERE NOT NULL`, `(product_brief_id) WHERE NOT NULL`, and composite `(kind, listing_id)`. Bunny backfill: 16 rows (6 listing-photos + 9 deliverables + 1 source_file); planner 1 asset (source_file PDF).
   - `niche_memory` (22) — learnings keyed by `niche_tag` (`planneraddicts`: 17, `general`: 5)
   - `agent_config` (0) — tunable params per agent (no rows seeded yet; presence-only read in Research Agent)
   - `agent_runs` (7) — every agent execution with cost/status/timings
@@ -232,9 +232,10 @@ Root: `brain/`. All paths below are relative to that.
 - [ ] First sale (validation milestone) — both listings active, awaiting market signal
 
 #### Use the Listing Agent (just shipped) on real briefs
-- [ ] Generate marketing assets for the bunny's 4 missing image slots (hero / lifestyle / size_grid / lifestyle_detail).
-- [ ] Generate marketing assets for the planner's 5 missing image slots (all of them — only the source PDF is registered today).
-- [ ] Diff agent-generated descriptions vs the currently-live Etsy bodies; if the agent's reads better, paste it over.
+- [x] Bunny listing photos registered (6 fal UI photos in `products/hillward-nursery-bunny/listing-photos/`; manifest 4/5 ready).
+- [ ] Generate bunny `size_grid` asset.
+- [ ] Generate planner's 5 missing image slots.
+- [ ] Apply bunny description reconciliation manually (brief wins on SEO — fix deliverables to 5 JPGs before paste).
 - [ ] Decide Phase 2 OAuth + auto-publish gate (N≥5 clean previews approved per taxonomy before `--publish` becomes default).
 
 ### Data-Quality Bugs (open)
