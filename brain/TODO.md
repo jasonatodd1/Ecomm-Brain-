@@ -8,11 +8,10 @@
 - [ ] Run `npm run monitor:listings` daily by hand for 3–5 days before scheduling cron — confirms baseline behavior, surfaces edge cases (state changes, sold_out, tag edits, etc.) per principle #7
 - [ ] First sale (validation milestone) — both listings active, awaiting market signal
 
-### Begin Listing Agent build (Tuning Pass 2 + SEO engine + asset pipeline + data layer all green)
-- [ ] Migration `0007_assets.sql` (see `LISTING_AGENT_REQUIREMENTS.md` §6)
-- [ ] `gen` + `upscale` tools UPSERT into `assets` in addition to `activity`
-- [ ] `npm run link:asset` CLI for backfilling the bunny + planner assets generated outside the system
-- _Asset pipeline gap DONE — `npm run build:bundle` now produces the full deliverable set every v2 brief promises (master JPG + sized JPGs + print-bundle PDF + transparent PNG + ratio-guide PDF). Listing Agent has nothing to backfill or discover._
+### Begin Listing Agent build (Tuning Pass 2 + SEO engine + asset pipeline + asset registry all green)
+- [ ] Listing Agent itself — only remaining prerequisite. See `brain/LISTING_AGENT_REQUIREMENTS.md` for full spec.
+- _Asset registry DONE — `assets` table populated for both live listings; `gen` / `upscale` / `build:bundle` / `resize:print` write rows automatically; `npm run link:asset` handles manual / pre-pipeline assets._
+- _Asset pipeline gap DONE — `npm run build:bundle` produces the full deliverable set every v2 brief promises._
 
 ## Data-Quality Bugs (open)
 - _All three fixed; see "Data-Quality Bug Fixes" section in Done._
@@ -37,12 +36,10 @@
 - [ ] **Competitive SEO Scoring engine — remaining work after v1.** v1 scorer + Research Agent integration shipped in the `tune research agent (pass 2)` commit (10 rules, deterministic, no LLM; per-keyword classification on every new brief). Two follow-ups remain — both gated on a Listing Agent existing:
   - [ ] Score every `monitor-listings.ts` snapshot and surface week-over-week drift (`COMPETITIVE_SEO_SCORING.md` §5).
   - [ ] Add `etsy_seo_gap` as a new signal type — only when Listing Agent ships and can act on the gap (`COMPETITIVE_SEO_SCORING.md` §6 step 6).
-- [ ] **Listing Agent** — full spec in `brain/LISTING_AGENT_REQUIREMENTS.md`. Store-agnostic core + per-store adapters (Etsy first, Pinterest next, Shopify deferred). Replaces the old "Etsy listing automation" placeholder. Consumes the shared SEO scoring engine (now built) as a downstream consumer per `LISTING_AGENT_REQUIREMENTS.md` §3. Remaining prerequisites:
-  - [ ] Migration `0007_assets.sql` — new `assets` table (kind/listing_id/product_brief_id/dimensions/source/cdn_url/fal_request_id). Listing Agent prerequisite per §6 of the spec.
-  - [ ] `gen` + `upscale` tools UPSERT into `assets` in addition to `activity` (per §6).
-  - [ ] `npm run link:asset` CLI for backfilling assets generated outside the system — bunny + planner pre-date the gen tool and need linking before the agent ships (per §6).
-  - _Research Agent Tuning Pass 2 prerequisite is DONE (shipped in the `tune research agent (pass 2)` commit)._
-  - _Asset pipeline gap prerequisite is DONE (shipped in the `expand asset pipeline` commit); `npm run build:bundle` produces the full deliverable set._
+- [ ] **Listing Agent** — full spec in `brain/LISTING_AGENT_REQUIREMENTS.md`. Store-agnostic core + per-store adapters (Etsy first, Pinterest next, Shopify deferred). Replaces the old "Etsy listing automation" placeholder. Consumes the shared SEO scoring engine (now built) as a downstream consumer per `LISTING_AGENT_REQUIREMENTS.md` §3. **All prerequisites DONE — Listing Agent is the next build:**
+  - _Research Agent Tuning Pass 2 — DONE (shipped in the `tune research agent (pass 2)` commit)._
+  - _Asset pipeline expansion — DONE (shipped in the `expand asset pipeline` commit); `npm run build:bundle` produces the full deliverable set._
+  - _Asset registry (§6) — DONE (shipped in the `feat: asset registry` commit); table populated, all 4 producers auto-write, `link:asset` for manual rows._
 - [ ] Dashboard on Vercel (Supabase Realtime)
 - [ ] Orchestrator (cadence-driven job scheduling instead of git-push-driven)
 - [ ] Proactive notifications (Telegram bot, daily email digest, weekly strategic brief)
@@ -51,6 +48,13 @@
 - [ ] Backup strategy for Supabase
 
 ## Done
+
+### Asset Registry (`feat: asset registry` commit)
+- [x] **Migration 0007 — `assets` table.** Columns: `id`, `kind` (text + CHECK over 11 values), `listing_id` (FK → `listings.id`, nullable), `product_brief_id` (FK → `product_briefs.id`, nullable), `local_path`, `cdn_url`, `width`, `height`, `source` (text + CHECK over 8 values), `fal_request_id`, `metadata` (jsonb default `{}`), `created_at`. Indexes on `(listing_id) WHERE NOT NULL`, `(product_brief_id) WHERE NOT NULL`, and composite `(kind, listing_id)` for the dominant Listing Agent query "find the hero for listing X". RLS off — server-write-only, same posture as `listings_stats` / `product_briefs` / `agent_runs`.
+- [x] **All 4 asset producers auto-write into `assets` in addition to their existing activity rows.** `generate-image.ts` → kind=hero default + `--kind` / `--listing-id` flags, source=`fal_generated`, cdn_url=fal URL, dims from sharp post-verify. `upscale-image.ts` → kind=master default + `--kind` / `--listing-id` flags, source=`fal_upscaled`. `build-print-bundle.ts` → one row per deliverable: master→`master`, sized JPGs→5×`print_variant`, print-bundle PDF→`crop_marks_pdf`, transparent PNG→`transparent`, ratio-guide→`ratio_guide` (all `source=build_bundle`). `resize-print-variants.ts` (legacy CLI) → one `print_variant` row per sized JPG, `source=resize_print`. All writes go through the shared `src/lib/assets.ts` helper which prints `[ASSET_INSERT_FAILED]` and continues on failure (file is already on disk; losing the registry row is recoverable via `link:asset`, but crashing after the artifact landed would be worse).
+- [x] **Shared `src/lib/assets.ts` helper** — `insertAsset()` (soft-fail, used by producers), `findAssetByPath()` (used by `link:asset` for idempotency), exported `ASSET_KINDS` / `ASSET_SOURCES` arrays + TypeScript union types kept in sync with the migration's CHECK constraints.
+- [x] **`npm run link:asset` CLI** (`src/tools/link-asset.ts`). Args: `--listing-id` OR `--etsy-listing-id` (auto-resolves to listings.id uuid via Supabase lookup) OR `--product-brief-id` (one required), `--kind` (required, validated against `ASSET_KINDS`), `--path` (required, must exist on disk), `--source` (default `manual_upload`, validated against `ASSET_SOURCES`), `--width` / `--height` (optional, auto-read via sharp for raster images), `--cdn-url`, `--fal-request-id`, `--metadata='<json>'`. Idempotent on `(kind, local_path)` — re-runs print `~ already linked` and exit 0. Writes activity row with `action='asset.linked'` on success.
+- [x] **Bunny + planner backfill complete** (12 rows total, 0 missing-disk warnings). Bunny: 1×`source_file` (master/bunny 10.png, source=`fal_ui`) + 9 deliverables (1×`master`, 1×`crop_marks_pdf`, 1×`transparent`, 1×`ratio_guide`, 5×`print_variant` — all `source=build_bundle`) + 1×`whats_included` (dist/whats-included.png, source=`render_graphic`) = 11 assets for `etsy_listing_id=4508704536`. Planner: 1×`source_file` (dist/planner-v1.pdf, source=`render_planner`) for `etsy_listing_id=4508059444`. The planner's prior versioned PDFs (v2/v3 referenced in the requirements doc) aren't on disk — only v1 — so only v1 was linked. Auto-dimension detection confirmed (e.g., bunny 8x10 variant correctly read as 5008×6260 after the 4:5 ratio crop). Idempotency smoke-tested by re-running master link — clean no-op.
 
 ### Data-Quality Bug Fixes (`fix(data-quality)` commit)
 - [x] **Bug 1 — `opportunities.niche` null on every row.** Fixed in `brain/src/jobs/score-opportunities.ts`: added `niche` to `OpportunityUpsert`, written on every upsert. Reddit opps inherit the subreddit (already in signal metadata as `subreddit`); Google Trends opps get `DEFAULT_NICHE = 'general'` (mirrors the Research Agent's `nicheTag` fallback in `src/agents/research/index.ts`). Backfill: `UPDATE opportunities SET niche = CASE WHEN metadata->>'source'='reddit' THEN metadata->>'subreddit' ELSE 'general' END`. Result: **opps with non-null niche: 0 → 11** (9 'general', 2 'planneraddicts').

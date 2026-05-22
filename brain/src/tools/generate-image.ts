@@ -33,6 +33,7 @@ import {
 } from '../lib/fal.js';
 import { log } from '../lib/log.js';
 import { mapWithLimit } from '../lib/concurrency.js';
+import { insertAsset, type AssetKind } from '../lib/assets.js';
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -92,19 +93,34 @@ export interface GenerateImageOptions {
   outputFormat?: 'png' | 'jpeg';
 
   /**
-   * Optional FK to a `product_briefs.id`. When set, downstream agents can
-   * query `activity` for images linked to a brief:
-   *   SELECT metadata FROM activity
-   *   WHERE action='image.generated'
-   *     AND metadata->>'product_brief_id' = '<uuid>'
+   * Optional FK to a `product_briefs.id`. Persisted on both the activity row
+   * and the new `assets` row so downstream agents can resolve a brief →
+   * its assets in one query (`SELECT * FROM assets WHERE product_brief_id = ?`).
    */
   productBriefId?: string;
+
+  /**
+   * Optional FK to a `listings.id`. Persisted on the assets row so the
+   * Listing Agent can fetch the asset set for a live listing in one query.
+   * When omitted, the asset is brief-linked only (no listing exists yet).
+   */
+  listingId?: string;
+
+  /**
+   * Asset `kind` for the new `assets` row. Defaults to 'hero' because the
+   * common case for `generate-image.ts` is producing a listing hero. Override
+   * via `--kind=lifestyle | whats_included | size_grid | lifestyle_detail`
+   * when generating supporting imagery.
+   */
+  kind?: AssetKind;
 
   /** Freeform metadata an agent caller wants attached to the activity row. */
   agentContext?: Record<string, unknown>;
 
   /** Skip writing to the activity table (default: false). */
   logToActivity?: boolean;
+  /** Skip writing to the assets table (default: false). */
+  registerAsset?: boolean;
 }
 
 export interface GeneratedImage {
@@ -309,9 +325,41 @@ export async function generateImage(
         total_cost_usd: totalCostUsd,
         duration_ms: durationMs,
         product_brief_id: opts.productBriefId,
+        listing_id: opts.listingId,
         agent_context: opts.agentContext,
       },
     });
+  }
+
+  // ----- Asset registry (queryable hand-off to the Listing Agent) -----
+  // One assets row per generated image. Default kind='hero' since that is
+  // the dominant use case for this tool; explicit --kind overrides.
+  if (opts.registerAsset !== false) {
+    const assetKind: AssetKind = opts.kind ?? 'hero';
+    for (const img of images) {
+      await insertAsset({
+        kind: assetKind,
+        source: 'fal_generated',
+        listing_id: opts.listingId,
+        product_brief_id: opts.productBriefId,
+        local_path: img.localPath,
+        cdn_url: img.falUrl,
+        width: img.width,
+        height: img.height,
+        fal_request_id: img.falRequestId,
+        metadata: {
+          model: modelId,
+          prompt: opts.prompt,
+          refs: refUrls,
+          seed: img.seed,
+          cost_usd: img.costUsd,
+          duration_ms: durationMs,
+          corrected_from: img.correctedFrom,
+          batch_index: img.index,
+          batch_count: count,
+        },
+      });
+    }
   }
 
   return result;
@@ -354,6 +402,8 @@ function parseArgs(argv: string[]): ParsedArgs {
       case 'output':            out.output = val; break;
       case 'output-format':     out.outputFormat = val === 'jpeg' || val === 'jpg' ? 'jpeg' : 'png'; break;
       case 'product-brief-id':  out.productBriefId = val; break;
+      case 'listing-id':        out.listingId = val; break;
+      case 'kind':              out.kind = val as AssetKind; break;
       default:                  console.warn(`> ignoring unknown flag: --${key}`);
     }
   }
@@ -382,7 +432,10 @@ function usage(): never {
   console.error('  --output-format=png|jpeg  Default: inferred from --output extension, else png');
   console.error('');
   console.error('Agent integration (optional):');
-  console.error('  --product-brief-id=<uuid> Link this generation to a product_briefs row for downstream agents');
+  console.error('  --product-brief-id=<uuid> Link this generation to a product_briefs row (FK on assets row)');
+  console.error('  --listing-id=<uuid>       Link this generation to a listings row (FK on assets row)');
+  console.error('  --kind=<asset-kind>       Asset kind for the assets row. Default: hero.');
+  console.error('                            Accepted: hero | lifestyle | whats_included | size_grid | lifestyle_detail');
   console.error('');
   console.error('Examples:');
   console.error('  npm run gen -- --prompt="vintage watercolor bunny, scalloped frame" --size=1728x2304');

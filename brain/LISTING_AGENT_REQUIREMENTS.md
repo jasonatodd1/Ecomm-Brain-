@@ -121,7 +121,9 @@ For each `(brief_id, store)` run, the agent emits a `ListingPackage` object — 
 
 ---
 
-## 6. Backfill prerequisite — `assets` table + manual linking CLI
+## 6. Backfill prerequisite — `assets` table + manual linking CLI ✅ BUILT
+
+> **Status:** Shipped. Migration `0007_assets.sql` is applied; all 4 asset producers (`generate-image.ts`, `upscale-image.ts`, `build-print-bundle.ts`, `resize-print-variants.ts`) auto-write into the registry via the shared `brain/src/lib/assets.ts` helper; `npm run link:asset` handles manual / pre-pipeline entries; both live listings backfilled (12 rows total, 0 missing-disk warnings). This section is preserved as the design spec — the implementation diverges slightly (see the **Implementation notes** at the bottom).
 
 The image manifest in §5 needs an asset registry the agent can query. Today, generated/upscaled assets are written to `dist/gen/` and logged in `activity` as `image.generated` / `image.upscaled`, but there's no first-class table for "what assets exist, for what listing/brief, of what kind, at what resolution." That's a Listing Agent blocker.
 
@@ -167,6 +169,14 @@ npm run link:asset -- \
 ```
 
 Idempotent: keyed on `(listing_id, kind, local_path)`. The two existing HillwardStudio listings need to be linked to their currently-live assets via this CLI before the Listing Agent ships, so the asset history is complete.
+
+### Implementation notes (shipped)
+
+- **Migration:** `supabase/migrations/0007_assets.sql`. Diverges from the spec on two columns: dimensions are stored as separate `width INTEGER` / `height INTEGER` columns instead of a `dimensions jsonb` object (cheaper to index/query for the common "find images at least 5008×6680" pattern), and `kind` / `source` use `TEXT` with `CHECK` constraints (favored flexibility over a Postgres enum so adding a new kind is a one-line ALTER instead of a typed-enum migration dance).
+- **Shared helper:** `brain/src/lib/assets.ts` exports `insertAsset()` (soft-fail — prints `[ASSET_INSERT_FAILED]` and continues, so a registry insert failure never aborts a file that's already on disk), `findAssetByPath()` (used by `link:asset` for idempotency), and `ASSET_KINDS` / `ASSET_SOURCES` arrays plus TS union types that stay in sync with the migration's `CHECK` constraints.
+- **Producer integration:** `generate-image.ts` defaults `kind='hero'` (override via `--kind`); `upscale-image.ts` defaults `kind='master'`; `build-print-bundle.ts` emits one row per deliverable (master / 5×print_variant / crop_marks_pdf / transparent / ratio_guide, all `source='build_bundle'`); `resize-print-variants.ts` emits one `print_variant` row per sized JPG (`source='resize_print'`). All four also accept `--product-brief-id` and `--listing-id` flags so the FK columns get populated at creation time.
+- **`npm run link:asset`:** `brain/src/tools/link-asset.ts`. Supports both `--listing-id=<uuid>` and `--etsy-listing-id=<numeric>` (auto-resolves to the uuid via `listings.etsy_listing_id` lookup). Auto-reads `width`/`height` via sharp for raster images (PDFs and non-images leave dims null). Idempotent on `(kind, local_path)` — re-runs print `~ already linked` and exit 0 instead of inserting a duplicate. Writes an `activity` row with `action='asset.linked'` on every successful insert.
+- **Backfill complete:** 12 rows total for the 2 live listings (11 for bunny `etsy_listing_id=4508704536`, 1 for planner `etsy_listing_id=4508059444`). See `brain/TODO.md` → Done → "Asset Registry" for the full per-kind breakdown.
 
 ---
 

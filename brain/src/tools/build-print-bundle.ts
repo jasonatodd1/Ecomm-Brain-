@@ -38,6 +38,7 @@ import {
 } from '../lib/print-bundle.js';
 import { removeBackground, formatFalValidationError } from '../lib/fal.js';
 import { log } from '../lib/log.js';
+import { insertAsset, type AssetKind } from '../lib/assets.js';
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -54,10 +55,14 @@ export interface BuildPrintBundleOptions {
   namePrefix?: string;
   /** Optional override of the output directory. Default: products/<slug>/deliverables/. */
   outputDir?: string;
-  /** Optional FK to a product_briefs row, persisted on every activity row. */
+  /** Optional FK to a product_briefs row, persisted on every activity + assets row. */
   productBriefId?: string;
+  /** Optional FK to a listings row, persisted on every assets row. */
+  listingId?: string;
   /** Skip writing to the activity table (default: false). */
   logToActivity?: boolean;
+  /** Skip writing to the assets table (default: false). */
+  registerAssets?: boolean;
   /** Skip the (slow + fal-dependent) background-removal step. Default: false. */
   skipTransparent?: boolean;
 }
@@ -123,6 +128,19 @@ export async function buildPrintBundle(
     deliverables.push(summary);
     console.log(`     ${r.width}×${r.height} px — ${r.sizeMb.toFixed(2)} MB — ${(dur / 1000).toFixed(1)}s`);
     await maybeLog(opts, productTitle, summary);
+    await maybeRegister(opts, {
+      kind: 'master',
+      localPath: r.outputPath,
+      width: r.width,
+      height: r.height,
+      metadata: {
+        deliverable: 'master_jpg',
+        product_slug: opts.productSlug,
+        dpi: r.dpi,
+        size_mb: Number(r.sizeMb.toFixed(2)),
+        duration_ms: dur,
+      },
+    });
   }
 
   // ----- 2. Sized JPG variants -------------------------------------------
@@ -161,6 +179,22 @@ export async function buildPrintBundle(
     }
     console.log(`     total ${r.totalSizeMb.toFixed(2)} MB — ${(dur / 1000).toFixed(1)}s`);
     await maybeLog(opts, productTitle, summary);
+    // One assets row PER sized variant — kind='print_variant'.
+    for (const v of r.variants) {
+      await maybeRegister(opts, {
+        kind: 'print_variant',
+        localPath: v.outputPath,
+        width: v.width,
+        height: v.height,
+        metadata: {
+          deliverable: 'sized_jpg_set',
+          product_slug: opts.productSlug,
+          size_name: v.size.name,
+          ratio: v.size.ratio,
+          size_mb: Number(v.sizeMb.toFixed(2)),
+        },
+      });
+    }
   }
 
   // ----- 3. Print-bundle PDF ---------------------------------------------
@@ -181,6 +215,18 @@ export async function buildPrintBundle(
     deliverables.push(summary);
     console.log(`     ${r.pageCount} pages — ${r.sizeMb.toFixed(2)} MB — ${(dur / 1000).toFixed(1)}s`);
     await maybeLog(opts, productTitle, summary);
+    await maybeRegister(opts, {
+      kind: 'crop_marks_pdf',
+      localPath: r.outputPath,
+      metadata: {
+        deliverable: 'print_bundle_pdf',
+        product_slug: opts.productSlug,
+        page_count: r.pageCount,
+        pages: PRINT_SIZES.map(s => s.name),
+        size_mb: Number(r.sizeMb.toFixed(2)),
+        duration_ms: dur,
+      },
+    });
   }
 
   // ----- 4. Transparent PNG (fal birefnet/v2) ----------------------------
@@ -219,6 +265,24 @@ export async function buildPrintBundle(
         `     ${r.outputDimensions.width}×${r.outputDimensions.height} px — ${sizeMb.toFixed(2)} MB — ${(dur / 1000).toFixed(1)}s — $${r.costUsd.toFixed(3)}`
       );
       await maybeLog(opts, productTitle, summary);
+      await maybeRegister(opts, {
+        kind: 'transparent',
+        localPath: outPath,
+        cdnUrl: r.outputUrl,
+        width: r.outputDimensions.width,
+        height: r.outputDimensions.height,
+        falRequestId: r.falRequestId,
+        metadata: {
+          deliverable: 'transparent_png',
+          product_slug: opts.productSlug,
+          model: 'fal-ai/birefnet/v2',
+          variant: r.variant,
+          operating_resolution: r.operatingResolution,
+          size_mb: Number(sizeMb.toFixed(2)),
+          cost_usd: r.costUsd,
+          duration_ms: dur,
+        },
+      });
     } catch (err) {
       const falMsg = formatFalValidationError(err);
       const msg = falMsg ?? (err instanceof Error ? err.message : String(err));
@@ -261,6 +325,18 @@ export async function buildPrintBundle(
     deliverables.push(summary);
     console.log(`     ${r.sizeMb.toFixed(2)} MB — ${(dur / 1000).toFixed(1)}s`);
     await maybeLog(opts, productTitle, summary);
+    await maybeRegister(opts, {
+      kind: 'ratio_guide',
+      localPath: r.outputPath,
+      metadata: {
+        deliverable: 'ratio_guide_pdf',
+        product_slug: opts.productSlug,
+        page_count: 1,
+        page_size: 'US Letter',
+        size_mb: Number(r.sizeMb.toFixed(2)),
+        duration_ms: dur,
+      },
+    });
   }
 
   const totalCostUsd = deliverables.reduce((sum, d) => sum + d.costUsd, 0);
@@ -293,6 +369,7 @@ async function maybeLog(
     metadata: {
       product_slug: opts.productSlug,
       product_brief_id: opts.productBriefId,
+      listing_id: opts.listingId,
       kind: summary.kind,
       path: summary.outputPath,
       size_mb: Number(summary.sizeMb.toFixed(2)),
@@ -304,6 +381,36 @@ async function maybeLog(
     // log() already prints [ACTIVITY_LOG_FAILED] for us; we just don't want
     // a logging failure to abort the bundle.
     console.error(`     (activity log failed for ${summary.kind}: ${err instanceof Error ? err.message : String(err)})`);
+  });
+}
+
+// Registers ONE asset row per call. Sized variants call this once per JPG
+// (so 5 rows for the sized_jpg_set). All build-bundle deliverables get
+// source='build_bundle' on the assets row.
+async function maybeRegister(
+  opts: BuildPrintBundleOptions,
+  args: {
+    kind: AssetKind;
+    localPath: string;
+    cdnUrl?: string;
+    width?: number;
+    height?: number;
+    falRequestId?: string;
+    metadata: Record<string, unknown>;
+  }
+): Promise<void> {
+  if (opts.registerAssets === false) return;
+  await insertAsset({
+    kind: args.kind,
+    source: 'build_bundle',
+    listing_id: opts.listingId,
+    product_brief_id: opts.productBriefId,
+    local_path: args.localPath,
+    cdn_url: args.cdnUrl,
+    width: args.width,
+    height: args.height,
+    fal_request_id: args.falRequestId,
+    metadata: args.metadata,
   });
 }
 
@@ -339,6 +446,7 @@ interface ParsedArgs {
   namePrefix?: string;
   outputDir?: string;
   productBriefId?: string;
+  listingId?: string;
   skipTransparent?: boolean;
   _help?: boolean;
 }
@@ -364,6 +472,7 @@ function parseArgs(argv: string[]): ParsedArgs {
       case 'name-prefix':       out.namePrefix = val; break;
       case 'output-dir':        out.outputDir = val; break;
       case 'product-brief-id':  out.productBriefId = val; break;
+      case 'listing-id':        out.listingId = val; break;
       default:                  console.warn(`> ignoring unknown flag: --${key}`);
     }
   }
@@ -383,7 +492,8 @@ function usage(): never {
   console.error('                            (default: HillwardStudio-<TitleCasedSlug>)');
   console.error('  --output-dir=<path>       Override output dir');
   console.error('                            (default: products/<slug>/deliverables/)');
-  console.error('  --product-brief-id=<uuid> FK to product_briefs.id, attached to every activity row');
+  console.error('  --product-brief-id=<uuid> FK to product_briefs.id, attached to every activity + assets row');
+  console.error('  --listing-id=<uuid>       FK to listings.id, attached to every assets row');
   console.error('  --skip-transparent        Skip the fal birefnet call (faster local iteration)');
   console.error('');
   console.error('Produces:');
@@ -411,6 +521,7 @@ async function main(): Promise<void> {
     namePrefix: parsed.namePrefix,
     outputDir: parsed.outputDir,
     productBriefId: parsed.productBriefId,
+    listingId: parsed.listingId,
     skipTransparent: parsed.skipTransparent,
   });
 

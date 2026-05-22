@@ -35,6 +35,7 @@ import {
   formatFalValidationError,
 } from '../lib/fal.js';
 import { log } from '../lib/log.js';
+import { insertAsset, type AssetKind } from '../lib/assets.js';
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -94,10 +95,24 @@ export interface UpscaleImageOptions {
 
   /** Optional FK to a `product_briefs.id` for downstream agent lookups. */
   productBriefId?: string;
+  /**
+   * Optional FK to a `listings.id`. Persisted on the assets row so the
+   * Listing Agent can fetch its asset set in one query.
+   */
+  listingId?: string;
+  /**
+   * Asset `kind` for the new `assets` row. Defaults to 'master' because the
+   * common case for `upscale-image.ts` is producing a print-ready master from
+   * a smaller hero generation. Override via `--kind=hero` etc. when upscaling
+   * non-master assets.
+   */
+  kind?: AssetKind;
   /** Freeform metadata to attach to the activity row. */
   agentContext?: Record<string, unknown>;
   /** Skip writing to the activity table (default: false). */
   logToActivity?: boolean;
+  /** Skip writing to the assets table (default: false). */
+  registerAsset?: boolean;
 }
 
 export interface UpscaleImageResult {
@@ -293,7 +308,43 @@ export async function upscaleImage(
         },
         fal_request_id: result.requestId,
         product_brief_id: opts.productBriefId,
+        listing_id: opts.listingId,
         agent_context: opts.agentContext,
+      },
+    });
+  }
+
+  // ----- Asset registry (queryable hand-off to the Listing Agent) -----
+  if (opts.registerAsset !== false) {
+    const assetKind: AssetKind = opts.kind ?? 'master';
+    await insertAsset({
+      kind: assetKind,
+      source: 'fal_upscaled',
+      listing_id: opts.listingId,
+      product_brief_id: opts.productBriefId,
+      local_path: outputPath,
+      cdn_url: outputUrl,
+      width: outputDimensions.width,
+      height: outputDimensions.height,
+      fal_request_id: result.requestId,
+      metadata: {
+        model: modelId,
+        input_url: inputUrl,
+        input_path: isLocalInput ? path.resolve(opts.input) : undefined,
+        input_dimensions: inputDimensions,
+        upscale_factor: scale,
+        seed,
+        cost_usd: costUsd,
+        duration_ms: durationMs,
+        corrected_from: correctedFrom,
+        params: {
+          prompt: input.prompt,
+          negative_prompt: input.negative_prompt,
+          creativity: input.creativity,
+          resemblance: input.resemblance,
+          guidance_scale: input.guidance_scale,
+          num_inference_steps: input.num_inference_steps,
+        },
       },
     });
   }
@@ -341,6 +392,8 @@ function parseArgs(argv: string[]): ParsedArgs {
       case 'output':           out.output = val; break;
       case 'output-format':    out.outputFormat = val === 'jpeg' || val === 'jpg' ? 'jpeg' : 'png'; break;
       case 'product-brief-id': out.productBriefId = val; break;
+      case 'listing-id':       out.listingId = val; break;
+      case 'kind':             out.kind = val as AssetKind; break;
       default:                 console.warn(`> ignoring unknown flag: --${key}`);
     }
   }
@@ -375,7 +428,10 @@ function usage(): never {
   console.error('  --output-format=png|jpeg  default: inferred from --output extension, else png');
   console.error('');
   console.error('Agent integration (optional):');
-  console.error('  --product-brief-id=<uuid> Link this upscale to a product_briefs row for downstream agents');
+  console.error('  --product-brief-id=<uuid> Link this upscale to a product_briefs row (FK on assets row)');
+  console.error('  --listing-id=<uuid>       Link this upscale to a listings row (FK on assets row)');
+  console.error('  --kind=<asset-kind>       Asset kind for the assets row. Default: master.');
+  console.error('                            Accepted: master | hero | lifestyle | source_file');
   console.error('');
   console.error('Examples:');
   console.error('  # 2x upscale with faithful defaults');

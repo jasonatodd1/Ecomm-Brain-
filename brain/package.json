@@ -22,6 +22,7 @@
     "render:graphic": "tsx src/render/render-graphic.ts",
     "gen": "tsx src/tools/generate-image.ts",
     "upscale": "tsx src/tools/upscale-image.ts",
+    "link:asset": "tsx src/tools/link-asset.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
