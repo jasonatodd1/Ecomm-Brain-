@@ -173,17 +173,24 @@ The `etsy_seo_gap` signal type ships when the Listing Agent ships (per §6 build
 
 ## 5. Listing Agent role — pre-publish quality gate
 
+> **Status: live (Listing Agent v1, 2026-05-22).** The Listing Agent is now a real consumer of this engine — see `brain/src/agents/listing/index.ts`. v1 deviates from the multi-retry spec below: it caps Opus passes at **one** per package (the spec said up to 2) and writes a `gaps[]` checklist for the operator instead of blocking publish (since v1 is preview-only — the operator pastes by hand, so the human is already the publish-time gate; principle #7 deferred the auto-block + `decisions_needed` escalation to Phase 2 once `--publish` mode ships). Both Tuning Pass 2 validation runs cleared the incumbent ceiling on the deterministic first draft (bunny 91% vs 66% incumbent median; planner 97% vs 68%), so the Opus pass never actually fired — total Opus cost $0.00 for the two-product validation.
+
 The Listing Agent's job is to produce a publish-ready package (per `LISTING_AGENT_REQUIREMENTS.md`). Competitive SEO scoring gives it a deterministic answer to "is this draft actually competitive?"
 
 ### Pre-publish gate
 
-After the Listing Agent assembles a `ListingPackage` (title, description, tags, attributes, shop section, etc.), it scores its own draft via the same `scoreEtsyListingSeo()` function. Decision tree:
+After the Listing Agent assembles a `ListingPackage` (title, description, tags, attributes, shop section, etc.), it scores its own draft via the same `scoreEtsyListingSeo()` function. v1 behavior:
 
-1. **Draft scores ≥ ceiling-of-incumbents.** Approve for publish (or for operator preview, in `--preview` mode).
-2. **Draft scores within 10 points of ceiling-of-incumbents but has gaps the agent can fix automatically.** Re-iterate: ask Opus to revise the specific weak areas (e.g. lengthen description, add FAQ entries, add ALL-CAPS section header). Re-score. Up to 2 retry passes; record both attempts in `agent_runs.metadata.draft_iterations[]`.
-3. **Draft cannot be made competitive after retries.** Block publish, write a `decision_needed` row with the score breakdown and the gap analysis, escalate to the operator. This is the "agent knows when to ask for help" branch — much better than publishing a draft that loses by default.
+1. **Draft scores ≥ incumbent benchmark.** Approve for operator review (`--preview` is the only mode in v1).
+2. **Draft scores below incumbent benchmark.** Run ONE Opus pass on the specific `weak_areas` returned by the scorer, re-validate the LLM output through the same title/tag/length rules as the deterministic draft, re-score. Cap at 1 pass — the orchestrator does not recurse.
+3. **Still below incumbent benchmark after the Opus pass.** Add a `seo_below_incumbents` line to `gaps[]` with the before/after score and the remaining weak areas. The operator decides at preview time whether to ship as-is or hand-edit further. (Phase 2 — when `--publish` ships — converts this branch into the spec's original "block publish + write `decisions_needed` row" behavior, per principle #7.)
 
-The "ceiling-of-incumbents" target is the **median score of the top 5 listings** for the brief's primary keyword as captured in `brief.competitive_landscape`. The Listing Agent doesn't need to refetch — it reads what Research already produced. (If `competitive_landscape` is absent, e.g. brief predates Tuning Pass 2, the agent falls back to a flat 75% target.)
+The "incumbent benchmark" target is the **median score of the top 3 incumbents** for the toughest keyword in `brief.listing.competitive_landscape` (priority order for "toughest": `red_ocean` > `mixed` > `weak_incumbents` > `open_field`; tie-break by highest median). The Listing Agent doesn't refetch — it reads what Research already produced. (If `competitive_landscape` is absent, e.g. brief predates Tuning Pass 2, the agent falls back to a flat 75% target.)
+
+### Scoring engine integration notes (v1, learned in build)
+
+- `scoreEtsyListingSeo()` Rule 8 (`attribute_fill_rate`) is the engine's only rule that requires data the listing struct doesn't carry on its own — specifically the *total* number of applicable attributes for the listing's taxonomy. v1 Listing Agent is the first caller to populate it: it passes `applicable_attribute_count` (non-block-listed properties from the taxonomy properties response) and `filled_attribute_count` (mapped attributes) into the scorer's `ScoringContext`. Other callers (`competitive.ts` scoring incumbents in research, `monitor-listings.ts` scoring drift) currently skip this rule because they don't fetch live taxonomy properties for every listing they score — those callers need to opt in later if/when the cost trade-off is worth it. Today they pay the missing-rule penalty (score out of `max=80` instead of `max=90`), which is fine because the engine normalizes via `percent`.
+- The "single source of truth" design held — both `competitive.ts` (research-time incumbent scoring) and `src/agents/listing/index.ts` (publish-time draft scoring) import the same `scoreEtsyListingSeo`. Zero rule duplication; rubric changes propagate automatically.
 
 ### Post-publish drift monitoring
 
@@ -207,7 +214,7 @@ The competitive scoring engine sequences with the Tuning Pass 2 work that `LISTI
 2. **Implement `scoreEtsyListingSeo()`.** Either as the final step of Tuning Pass 2 or as its own milestone before the Listing Agent — both work. Backfill `competitive_landscape.per_keyword[].top_results[].seo_score` and `median_seo_percent` and `opportunity_classification` retroactively for the next research run (existing briefs stay as-is; new briefs get the richer field).
 3. **Wire competitive scoring into research synthesis.** Update the synthesis prompt (`prompts.ts`) to consume the new fields and surface weak-incumbent gaps in `brief.reasoning`. Expected effect: briefs for keywords with weak top-10 incumbents become noticeably more confident and more specific in their differentiation calls.
 4. **Score post-publish snapshots in `monitor-listings.ts`.** Once the scorer exists, the marginal cost of running it on every snapshot is ~zero (pure function over data we already have). Adds the §5 drift-monitoring capability for free.
-5. **Listing Agent imports the scorer for pre-publish gating** (per §5). This is the step where competitive scoring closes the loop end-to-end: Research finds the gap → Listing publishes against it → Listing self-checks it actually beat the incumbents → Monitor watches for drift.
+5. **Listing Agent imports the scorer for pre-publish gating** (per §5). ✅ **shipped 2026-05-22 (Listing Agent v1 commit).** This closes the loop end-to-end: Research finds the gap → Listing builds against it → Listing self-checks it actually beat the incumbents → Monitor watches for drift. v1 ships the build-against + self-check; Phase 2 (auto-publish + auto-block-on-fail) is deferred per principle #7 until N≥5 clean previews per (store + taxonomy) combo.
 6. **Add `etsy_seo_gap` as a new signal type.** Only after the Listing Agent ships. Before that, "we discovered a weak-incumbent niche" is information the system can't act on autonomously — surfacing it earlier just creates a backlog of unactioned `decisions_needed` rows.
 
 ---

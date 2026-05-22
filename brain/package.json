@@ -23,6 +23,7 @@
     "gen": "tsx src/tools/generate-image.ts",
     "upscale": "tsx src/tools/upscale-image.ts",
     "link:asset": "tsx src/tools/link-asset.ts",
+    "list:package": "tsx src/jobs/list-package.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -4,6 +4,35 @@
 >
 > Living document. Update whenever a manual publish reveals a new attribute-schema quirk, store rule, or asset gap the agent will need to handle.
 
+## Implementation status — v1 (2026-05-22)
+
+> **v1 shipped — package generator + manual publish.** `npm run list:package -- --brief-id=<uuid>` produces a full `PublishPackage` plus an operator-review markdown at `brain/packages/<date>-<brief_id>-etsy.md`. Validated end-to-end against both Tuning Pass 2 briefs (bunny SEO 91% / planner 97% — both beat their incumbent benchmarks; Opus pass never fired; total cost $0.00 for the two-product validation run).
+>
+> | Section | v1 capability | v1 status |
+> |---|---|---|
+> | §2 Inputs | `product_briefs` + `listings` + `assets` + `niche_memory` + Etsy taxonomy fetched per run | ✅ built |
+> | §3 Store-schema fetch | `getTaxonomyNodes()` + `getTaxonomyProperties()` cached to disk (24h / 7d) + in-memory | ✅ built |
+> | §3 Shop sections / shipping profiles | Fetch + auto-create on publish | ⏸ Phase 2 (needs OAuth) |
+> | §4 Allowed-value verification | `mapSemanticToAllowed()` exact → token → curated semantic → null (blank over wrong) | ✅ built |
+> | §5 `ListingPackage` output | Title + description + tags + taxonomy + attributes + materials + image_manifest + SEO score + gaps | ✅ built (no shop_section_id resolution / no publish_payload yet — see Phase 2) |
+> | §5 `--preview` mode | Writes `agent_runs.metadata.package` + operator markdown at `brain/packages/<date>-<brief_id>-etsy.md` | ✅ built (operator pastes by hand instead of going through `decision_needed`) |
+> | §5 `--publish` mode | OAuth POST to `/v3/application/shops/{shop_id}/listings` | ⏸ Phase 2 |
+> | §5 Auto-trigger missing-asset generation | Emits generation hints + ready-to-run `npm run gen` skeleton per missing slot | ✅ built as hints (auto-trigger is Phase 2 — operator runs the command) |
+> | §6 Asset registry | `assets` table + 4 producers + `link:asset` CLI | ✅ built (separate commit, prerequisite for v1) |
+> | §7 Research Agent Tuning Pass 2 | `attribute_intent` + structured `listing.description` + `image_spec` + `shop_section_suggestion` + `competitive_landscape` | ✅ built (separate commit, prerequisite for v1) |
+> | §8 Multi-store architecture | `src/agents/listing/` + `adapters/etsy.ts` shape | ✅ built for Etsy; Pinterest / Shopify deferred |
+> | §9 Logging | `agent_runs` (`agent='listing'`) + per-step `activity` rows | ✅ built |
+> | Pre-publish SEO gate | `scoreEtsyListingSeo()` against incumbent benchmark from `brief.competitive_landscape`, ONE Opus pass on `weak_areas` if below | ✅ built (capped at 1 pass per spec — never recurses) |
+>
+> **Phase 2 (deferred per principle #7):** OAuth flow + `--publish` mode + shop-section auto-create + auto-trigger missing-asset generation. Gated on N≥5 consecutive clean previews approved without operator edits per (store + taxonomy) combination.
+>
+> **v1 limitations identified during validation (tracked in `brain/TODO.md` → Backlog):**
+> 1. Style-descriptor ordering — agent picks first-match across descriptors, so for the bunny brief "vintage" wins over "cottagecore" and lands on `Home style=Victorian` rather than the closer `Country & farmhouse`. Fix: rank by lift score, or have Research Agent emit descriptors in priority order, or bias toward the brief's `differentiation_angle` keyword.
+> 2. `Art subject` discovery — agent currently skips it on the bunny because `audience_descriptors` doesn't contain "rabbit" / "bunny" / "animal". The hand-built bunny listing has `Art subject=Animal`. Fix: derive subject candidates from `product.name`, `product.design.required_elements`, and primary keyword nouns.
+> 3. `Pattern` free-text — agent surfaces as `free_text_not_mapped` instead of auto-filling. Fix: optionally emit the top 1–2 style descriptors as Pattern verbatim.
+>
+> None are blockers — all surface transparently in the agent's `gaps[]` and skipped-properties table; operator can patch each in seconds at publish time.
+
 ---
 
 ## 1. Purpose
