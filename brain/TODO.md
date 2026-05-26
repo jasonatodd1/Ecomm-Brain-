@@ -7,8 +7,8 @@
 ### White-space engine (proof-of-mechanism shipped 2026-05-22)
 - [x] **White-space triangulation scoring** — `npm run score:whitespace` runs gap engine standalone on candidate-pool opportunities; persists gap fields (migration 0009). Smoke-tested on 9 seed candidates.
 - [x] **Broad Trending Now collector** — `npm run collect:trending-now` (15 consumer categories, hours=168, Haiku product+IP gate, Pass C in `score-opportunities.ts`). First broad run: 2175 deduped → 600 classified → 6 kept → 16 candidates gap-scored.
-- [x] **Niche bake-off baseline run** — `npm run bakeoff` (20 keywords × 9 niches, Etsy+Google, neutral WS scoring + digital decision-hurdle). Baseline: `bakeoff-baseline-no-pinterest-2026-05-26T23-39-41`. See `NICHE_BAKEOFF.md`.
-- [ ] **Niche bake-off Pinterest treatment** — re-run with Pinterest demand slot populated; diff vs baseline.
+- [x] **Niche bake-off baseline run** — `npm run bakeoff` (20 keywords × 9 niches, Etsy+Google, neutral WS scoring + digital decision-hurdle). v1 (broken Google leg): `bakeoff-baseline-no-pinterest-2026-05-26T23-39-41`. v2 (fresh Trends per keyword): see latest `bakeoff-baseline-v2-google-fixed-*` run. See `NICHE_BAKEOFF.md`.
+- [ ] **Niche bake-off Pinterest treatment** — re-run with Pinterest demand slot populated; diff vs v2 baseline.
 - [ ] **Pinterest comparison + product #3 pick** — after bake-off treatment review.
 
 ### Drive first sale (both listings live, daily monitor capturing baseline)
@@ -44,6 +44,7 @@
 - [ ] Cron scheduling on Railway (after scoring engine validated AND after 3–5 days of manual `monitor:listings` runs validate output — listings monitor is the most immediate cron candidate; collectors next)
 - [ ] Scoring formula ceiling: multiple Google Trends keywords hitting confidence 1.000 — lost discrimination at top, needs refactor (higher ceiling, log scale, or different math)
 - [ ] Google Trends velocity volatility: keywords can swing from +8% to +494% in one cycle. Need historical tracking and a stability score before trusting single-run velocity
+- [ ] **Demand stability score** for bake-off / whitespace ranking — re-pull or longer-window confirmation for borderline niches (single-window Trends velocity is volatile; meal planner ext_demand swung 1.0→0 across runs)
 - [ ] LLM cost tracking integration with cost_log table (currently logging cost.api_call activity events but not aggregating)
 - [ ] Etsy 429 retry with exponential backoff (concurrency limit eliminated burst 429s; transient ones still possible — add retry honoring Retry-After header)
 - [ ] niche_memory confidence-bump mechanism (currently stuck at 0.50 regardless of evidence_count; confidence should grow with re-confirmation)
