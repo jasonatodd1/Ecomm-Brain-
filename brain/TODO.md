@@ -7,7 +7,9 @@
 ### White-space engine (proof-of-mechanism shipped 2026-05-22)
 - [x] **White-space triangulation scoring** — `npm run score:whitespace` runs gap engine standalone on candidate-pool opportunities; persists gap fields (migration 0009). Smoke-tested on 9 seed candidates.
 - [x] **Broad Trending Now collector** — `npm run collect:trending-now` (15 consumer categories, hours=168, Haiku product+IP gate, Pass C in `score-opportunities.ts`). First broad run: 2175 deduped → 600 classified → 6 kept → 16 candidates gap-scored.
-- [ ] **Pinterest comparison + product #3 pick** — next after broad run review.
+- [x] **Niche bake-off baseline run** — `npm run bakeoff` (20 keywords × 9 niches, Etsy+Google, neutral WS scoring + digital decision-hurdle). Baseline: `bakeoff-baseline-no-pinterest-2026-05-26T23-39-41`. See `NICHE_BAKEOFF.md`.
+- [ ] **Niche bake-off Pinterest treatment** — re-run with Pinterest demand slot populated; diff vs baseline.
+- [ ] **Pinterest comparison + product #3 pick** — after bake-off treatment review.
 
 ### Drive first sale (both listings live, daily monitor capturing baseline)
 - [ ] Run `npm run monitor:listings` daily by hand for 3–5 days before scheduling cron — confirms baseline behavior, surfaces edge cases (state changes, sold_out, tag edits, etc.) per principle #7

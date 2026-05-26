@@ -11,6 +11,7 @@
     "collect:trending-now": "tsx src/jobs/collect-trending-now.ts",
     "score": "tsx src/jobs/score-opportunities.ts",
     "score:whitespace": "tsx src/jobs/score-whitespace.ts",
+    "bakeoff": "tsx src/jobs/run-niche-bakeoff.ts",
     "seed:planneraddicts": "tsx src/jobs/seed-planneraddicts-decision.ts",
     "seed:listings": "tsx src/jobs/seed-listings.ts",
     "monitor:listings": "tsx src/jobs/monitor-listings.ts",
