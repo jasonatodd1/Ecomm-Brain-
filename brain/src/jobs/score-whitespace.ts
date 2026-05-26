@@ -10,18 +10,28 @@ import type { EtsySearchResult } from '../agents/research/types.js';
 
 const TOP_N = 10;
 const SEARCH_LIMIT = 25;
+const DEFAULT_DEMAND_CAP = 40;
+
+function parseLimitArg(): number {
+  const arg = process.argv.find(a => a.startsWith('--limit='));
+  if (!arg) return DEFAULT_DEMAND_CAP;
+  const n = parseInt(arg.split('=')[1] ?? '', 10);
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_DEMAND_CAP;
+}
 
 interface OpportunityRow {
   id: string;
   name: string;
   confidence_score: number | null;
+  demand_combined: number | null;
+  niche: string | null;
   metadata: Record<string, unknown>;
 }
 
 function resolveSearchKeyword(opp: OpportunityRow): string {
   const source =
     typeof opp.metadata['source'] === 'string' ? opp.metadata['source'] : '';
-  if (source === 'google_trends') {
+  if (source === 'google_trends' || source === 'google_trends_trending_now') {
     return opp.name;
   }
   if (typeof opp.metadata['title'] === 'string' && opp.metadata['title'].length > 0) {
@@ -34,7 +44,7 @@ function resolveSearchKeyword(opp: OpportunityRow): string {
 async function fetchCandidateOpportunities(): Promise<OpportunityRow[]> {
   const { data, error } = await supabase
     .from('opportunities')
-    .select('id, name, confidence_score, metadata')
+    .select('id, name, confidence_score, demand_combined, niche, metadata')
     .order('confidence_score', { ascending: false });
 
   if (error) {
@@ -72,6 +82,7 @@ async function fetchCandidateOpportunities(): Promise<OpportunityRow[]> {
 export interface WhitespaceRunResult {
   keyword: string;
   search_keyword: string;
+  niche: string;
   external_demand: number;
   incumbent_engagement: number;
   gap_classification: string;
@@ -80,6 +91,13 @@ export interface WhitespaceRunResult {
   quadrant: string;
   median_favorers: number;
   median_seo_percent: number;
+}
+
+function demandRankScore(opp: OpportunityRow): number {
+  if (opp.demand_combined != null && opp.demand_combined > 0) {
+    return Number(opp.demand_combined);
+  }
+  return Number(opp.confidence_score ?? 0);
 }
 
 async function main(): Promise<void> {
@@ -94,13 +112,21 @@ async function main(): Promise<void> {
     description: 'White-space triangulation scoring starting'
   });
 
-  const candidates = await fetchCandidateOpportunities();
-  if (candidates.length === 0) {
+  const demandCap = parseLimitArg();
+  const allCandidates = await fetchCandidateOpportunities();
+  if (allCandidates.length === 0) {
     console.log('[summary] no candidate opportunities (all have listing or brief)');
     return;
   }
 
-  console.log(`Scoring ${candidates.length} candidate opportunities…`);
+  const candidates = [...allCandidates]
+    .sort((a, b) => demandRankScore(b) - demandRankScore(a))
+    .slice(0, demandCap);
+
+  console.log(
+    `Scoring ${candidates.length} of ${allCandidates.length} candidate opportunities ` +
+      `(top ${demandCap} by demand)…`
+  );
 
   const keywordByOppId = new Map<string, string>();
   const searchKeywords: string[] = [];
@@ -188,6 +214,7 @@ async function main(): Promise<void> {
     results.push({
       keyword: opp.name,
       search_keyword: searchKeyword,
+      niche: opp.niche ?? 'general',
       external_demand: ws.external_demand,
       incumbent_engagement: ws.incumbent_engagement,
       gap_classification: entry.classification,
@@ -212,15 +239,28 @@ async function main(): Promise<void> {
 
   console.log('\n--- White-space scoreboard (sorted by white_space_score desc) ---');
   console.log(
-    'keyword | ext_demand | inc_engagement | classification | supply_weak | ws_score | quadrant'
+    'keyword | niche | ext_demand | inc_engagement | classification | supply_weak | ws_score | quadrant'
   );
   for (const r of results) {
     console.log(
-      `${r.search_keyword.slice(0, 40).padEnd(40)} | ` +
+      `${r.search_keyword.slice(0, 36).padEnd(36)} | ` +
+        `${(r.niche ?? '').slice(0, 14).padEnd(14)} | ` +
         `${r.external_demand.toFixed(3)} | ${r.incumbent_engagement.toFixed(3)} | ` +
         `${r.gap_classification.padEnd(16)} | ${r.supply_weakness.toFixed(3)} | ` +
         `${r.white_space_score.toFixed(3)} | ${r.quadrant}`
     );
+  }
+
+  const quadrantCounts = results.reduce(
+    (acc, r) => {
+      acc[r.quadrant] = (acc[r.quadrant] ?? 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>
+  );
+  console.log('\n--- Quadrant distribution ---');
+  for (const [q, n] of Object.entries(quadrantCounts).sort((a, b) => b[1] - a[1])) {
+    console.log(`  ${q}: ${n}`);
   }
 
   console.log(
@@ -235,6 +275,8 @@ async function main(): Promise<void> {
     severity: results.length === 0 ? 'warning' : 'success',
     metadata: {
       scored: results.length,
+      candidate_pool: allCandidates.length,
+      demand_cap: demandCap,
       etsy_search_calls: etsySearchCalls,
       etsy_listing_calls: etsyListingCalls,
       duration_sec: durationSec,

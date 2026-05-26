@@ -78,6 +78,42 @@ function buildRedditSourceCountIndex(signals: Signal[]): Map<string, number> {
   return counts;
 }
 
+function buildTrendingNowSourceCountIndex(signals: Signal[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const s of signals) {
+    if (s.source !== 'google_trends_trending_now') continue;
+    if (s.metric_type !== 'trending_now') continue;
+    counts.set(s.keyword, (counts.get(s.keyword) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/** Log-scaled volume normalization for Trending Now absolute search_volume. */
+function normalizeTrendingVolume(searchVolume: number): number {
+  const ref = 100_000;
+  return clamp(Math.log1p(Math.max(0, searchVolume)) / Math.log1p(ref), 0, 1);
+}
+
+/** Velocity from increase_percentage (1000% spike → capped at 1). */
+function normalizeTrendingVelocity(increasePct: number): number {
+  return clamp(increasePct / 500, 0, 1);
+}
+
+function nicheFromTrendMetadata(metadata: Record<string, unknown>): string {
+  const cats = metadata['categories'];
+  if (Array.isArray(cats) && cats.length > 0) {
+    const first = cats[0] as { name?: string };
+    if (typeof first.name === 'string') {
+      return first.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_|_$/g, '');
+    }
+  }
+  if (typeof metadata['niche'] === 'string') return metadata['niche'];
+  return 'trending';
+}
+
 async function fetchRecentSignals(): Promise<Signal[]> {
   const { data, error } = await supabase
     .from('signals')
@@ -219,6 +255,74 @@ function scoreReddit(signals: Signal[]): OpportunityUpsert[] {
 }
 
 // ---------------------------------------------------------------------------
+// Pass C — Google Trends Trending Now (broad seedless net)
+// ---------------------------------------------------------------------------
+
+function scoreTrendingNow(signals: Signal[]): OpportunityUpsert[] {
+  const tnSignals = signals.filter(
+    s =>
+      s.source === 'google_trends_trending_now' &&
+      s.metric_type === 'trending_now'
+  );
+  const sourceCountByKeyword = buildTrendingNowSourceCountIndex(signals);
+
+  const byKeyword = new Map<
+    string,
+    { searchVolume: number; velocityRaw: number; metadata: Record<string, unknown> }
+  >();
+
+  for (const sig of tnSignals) {
+    const vol = sig.value;
+    const velocityRaw =
+      typeof sig.metadata['increase_percentage'] === 'number'
+        ? sig.metadata['increase_percentage']
+        : typeof sig.metadata['velocity'] === 'number'
+          ? sig.metadata['velocity']
+          : 0;
+
+    const existing = byKeyword.get(sig.keyword);
+    if (!existing || vol > existing.searchVolume) {
+      byKeyword.set(sig.keyword, {
+        searchVolume: vol,
+        velocityRaw,
+        metadata: sig.metadata
+      });
+    }
+  }
+
+  const results: OpportunityUpsert[] = [];
+
+  for (const [keyword, { searchVolume, velocityRaw, metadata }] of byKeyword) {
+    const volNorm = normalizeTrendingVolume(searchVolume);
+    const velNorm = normalizeTrendingVelocity(velocityRaw);
+    const confidence = clamp(volNorm * 0.6 + velNorm * 0.4, 0, 1);
+    const niche = nicheFromTrendMetadata(metadata);
+
+    results.push({
+      name: keyword,
+      description:
+        `${keyword} | volume=${searchVolume}, velocity=+${velocityRaw.toFixed(0)}%, ` +
+        `signal=google_trends_trending_now`,
+      niche,
+      confidence_score: confidence,
+      status: confidence > 0.4 ? 'new' : 'investigating',
+      search_volume: searchVolume,
+      velocity: velocityRaw,
+      source_count: sourceCountByKeyword.get(keyword) ?? 1,
+      metadata: {
+        source: 'google_trends_trending_now',
+        via: 'serpapi',
+        categories: metadata['categories'],
+        gate: metadata['gate']
+      },
+      updated_at: new Date().toISOString()
+    });
+  }
+
+  return results;
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
@@ -235,7 +339,8 @@ async function main(): Promise<void> {
 
   const gtrendsOpps = scoreGoogleTrends(signals);
   const redditOpps = scoreReddit(signals);
-  const allOpps = [...gtrendsOpps, ...redditOpps];
+  const trendingNowOpps = scoreTrendingNow(signals);
+  const allOpps = [...gtrendsOpps, ...redditOpps, ...trendingNowOpps];
 
   let totalUpserted = 0;
   let topConfidence = 0;
@@ -264,7 +369,8 @@ async function main(): Promise<void> {
 
   console.log(
     `[summary] gtrends_scored=${gtrendsOpps.length} reddit_scored=${redditOpps.length} ` +
-      `total_upserted=${totalUpserted} top_confidence=${topConfidence.toFixed(3)}`
+      `trending_now_scored=${trendingNowOpps.length} total_upserted=${totalUpserted} ` +
+      `top_confidence=${topConfidence.toFixed(3)}`
   );
 
   try {
@@ -272,12 +378,13 @@ async function main(): Promise<void> {
       agent: 'intel',
       action: 'scoring.complete',
       description:
-        `Scoring done: ${gtrendsOpps.length} trends + ${redditOpps.length} reddit = ` +
-        `${totalUpserted} upserted in ${durationSec}s`,
+        `Scoring done: ${gtrendsOpps.length} trends + ${redditOpps.length} reddit + ` +
+        `${trendingNowOpps.length} trending_now = ${totalUpserted} upserted in ${durationSec}s`,
       severity: totalUpserted === 0 ? 'warning' : 'success',
       metadata: {
         gtrends_scored: gtrendsOpps.length,
         reddit_scored: redditOpps.length,
+        trending_now_scored: trendingNowOpps.length,
         total_upserted: totalUpserted,
         top_confidence: topConfidence,
         duration_sec: durationSec

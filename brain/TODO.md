@@ -5,8 +5,9 @@
 ## Current Focus
 
 ### White-space engine (proof-of-mechanism shipped 2026-05-22)
-- [x] **White-space triangulation scoring** — `npm run score:whitespace` runs gap engine standalone on candidate-pool opportunities; persists `gap_classification`, `incumbent_engagement`, `supply_weakness`, `demand_combined`, `white_space_score`, `quadrant`, `gap_analysis` jsonb (migration 0009). Smoke-tested on 9 candidates.
-- [ ] **Broad Trending Now collector** — next step after matrix validation: `engine=google_trends_trending_now` for cross-category discovery (`category_id` 16 Shopping + 8 Hobbies & Leisure), then feed new keywords into this same white-space scorer.
+- [x] **White-space triangulation scoring** — `npm run score:whitespace` runs gap engine standalone on candidate-pool opportunities; persists gap fields (migration 0009). Smoke-tested on 9 seed candidates.
+- [x] **Broad Trending Now collector** — `npm run collect:trending-now` (15 consumer categories, hours=168, Haiku product+IP gate, Pass C in `score-opportunities.ts`). First broad run: 2175 deduped → 600 classified → 6 kept → 16 candidates gap-scored.
+- [ ] **Pinterest comparison + product #3 pick** — next after broad run review.
 
 ### Drive first sale (both listings live, daily monitor capturing baseline)
 - [ ] Run `npm run monitor:listings` daily by hand for 3–5 days before scheduling cron — confirms baseline behavior, surfaces edge cases (state changes, sold_out, tag edits, etc.) per principle #7
@@ -63,6 +64,13 @@
 - [ ] Backup strategy for Supabase
 
 ## Done
+
+### Broad Trending Now collector (`feat: broad Trending Now collector` commit)
+- [x] **`collect-trending-now.ts`** + `npm run collect:trending-now` — SerpApi `engine=google_trends_trending_now`, 15 consumer categories (IDs verified at runtime against SerpApi JSON), `hours=168`, `geo=US`, dedupe by query with category union.
+- [x] **Haiku gate** — `classify-trend-relevance.ts`: PRODUCT vs NOISE + hard IP block; logs every query to `activity`.
+- [x] **Pass C** — `score-opportunities.ts` scores `google_trends_trending_now` / `trending_now` signals into opportunities (niche from category, log-scaled volume + velocity confidence).
+- [x] **Whitespace cap** — `score:whitespace --limit=40` ranks candidates by demand before Etsy gap scoring.
+- [x] **First broad run** — 2175 deduped, 600 classified (default `--classify-limit=600`), 6 kept, 16 total candidates gap-scored in 64s.
 
 ### White-space triangulation scoring (`feat: white-space triangulation scoring` commit)
 - [x] **`src/lib/whitespace-scoring.ts`** — demand × supply-quality matrix: `demand_combined = 0.35×external + 0.65×incumbent_engagement`; `supply_weakness` from gap classification + SEO median; `white_space_score = demand × supply_weakness`; quadrants WHITE_SPACE / RED_OCEAN / DEAD_ZONE / MATURE.

@@ -212,6 +212,20 @@ Thresholds: `demand_combined ≥ 0.45`, `supply_weakness ≥ 0.55` for "high"/"w
 
 **Incumbent engagement in gap output:** `CompetitiveTopIncumbent` now includes `num_favorers`, `views`, `shop_review_count` per top-3; landscape entries include `median_favorers`, `median_views`, `median_shop_reviews`.
 
+### Discovery funnel architecture (realized 2026-05-22)
+
+Two-stage net: **permissive cheap intake → expensive precise gap-scoring on capped top-N.**
+
+| Stage | Job | Cost | Output |
+|---|---|---|---|
+| Seed demand | `collect:trends` | ~10 SerpApi/mo | 10 printable seed keywords |
+| **Broad demand** | `collect:trending-now` | 15 SerpApi + Haiku gate | `signals` (`trending_now`) → Pass C opportunities |
+| Reddit demand | `collect:reddit` | OAuth + Haiku | buyer-intent posts |
+| Merge + rank | `score` | DB only | `opportunities` upserted by name |
+| **Supply quality** | `score:whitespace --limit=40` | ~8 Etsy calls × N candidates | gap fields + quadrant on top-N by demand |
+
+The Haiku gate on Trending Now is mandatory — raw Entertainment (657) + Sports (1279) trends are ~99% news/IP noise. Default `--classify-limit=600` ranks by `volume×velocity` before Haiku to bound cost; only survivors become signals.
+
 ---
 
 ## 5. Listing Agent role — pre-publish quality gate
