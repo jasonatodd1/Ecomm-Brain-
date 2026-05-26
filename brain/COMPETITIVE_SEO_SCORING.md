@@ -169,6 +169,49 @@ Keywords classified as `open_field` (≥7 of top 10 score weak) are stronger sig
 
 The `etsy_seo_gap` signal type ships when the Listing Agent ships (per §6 build order), not earlier — there's no point surfacing gaps the system can't credibly act on.
 
+### White-space triangulation (realized 2026-05-22)
+
+The demand-only scoring in `score-opportunities.ts` answers "is Google/Reddit showing interest?" The gap engine in `competitive.ts` answers "are incumbents weak?" **White-space scoring combines both** so we can distinguish real openings from traps.
+
+**Job:** `npm run score:whitespace` (`src/jobs/score-whitespace.ts`). For each candidate-pool opportunity (no listing, no brief):
+
+1. Resolve an Etsy search keyword (`name` for Trends seeds; Reddit post `title` for buyer-intent rows).
+2. `searchEtsy()` → `computeCompetitiveLandscape()` (same posture as Research: top-10 by favorers, 2-in-flight / 200ms stagger).
+3. Triangulate via `src/lib/whitespace-scoring.ts`.
+4. Persist enrichment on `opportunities` (migration 0009).
+
+**Demand axis (two sources blended):**
+
+| Source | Field | Meaning |
+|---|---|---|
+| External | `confidence_score` (0–1) | Trends interest/velocity or Reddit upvotes — what seeds/ collectors saw |
+| On-platform | `incumbent_engagement` (0–1) | log-normalized median favorers (+ shop review_count when fetched) among top incumbents — validates demand on Etsy |
+
+`demand_combined = 0.35 × external + 0.65 × incumbent_engagement`. Incumbent engagement is weighted higher so **open_field + low favorers → DEAD_ZONE** (empty niche trap) while **open_field + high favorers → WHITE_SPACE** (neglected but real demand).
+
+**Supply axis:**
+
+`supply_weakness` blends classification base (`open_field` 0.95 → `red_ocean` 0.15) with `(1 − median_seo_percent)`.
+
+**Score & quadrants:**
+
+```
+white_space_score = demand_combined × supply_weakness
+
+WHITE_SPACE  — high demand + weak supply (build here)
+RED_OCEAN    — high demand + strong supply (don't fight entrenched SEO)
+DEAD_ZONE    — low demand + weak supply (trap: nobody searching OR searching elsewhere)
+MATURE       — low demand + strong supply (saturated backwater)
+```
+
+Thresholds: `demand_combined ≥ 0.45`, `supply_weakness ≥ 0.55` for "high"/"weak" quadrants.
+
+**Persistence (queryable + auditable):**
+
+`gap_classification`, `incumbent_seo_median`, `incumbent_engagement`, `supply_weakness`, `demand_combined`, `white_space_score`, `quadrant`, and `gap_analysis` jsonb (top incumbents + scores + favorers + shop reviews + run metadata).
+
+**Incumbent engagement in gap output:** `CompetitiveTopIncumbent` now includes `num_favorers`, `views`, `shop_review_count` per top-3; landscape entries include `median_favorers`, `median_views`, `median_shop_reviews`.
+
 ---
 
 ## 5. Listing Agent role — pre-publish quality gate

@@ -10,7 +10,7 @@
 // markdown spec's defaults — see classifyKeyword). It does NOT own scoring
 // rules; those live in src/lib/etsy-seo-scoring.ts.
 
-import { getListing } from '../../lib/etsy-search.js';
+import { getListing, getShop } from '../../lib/etsy-search.js';
 import {
   scoreEtsyListingSeo,
   type SeoScore
@@ -32,6 +32,11 @@ export interface CompetitiveTopIncumbent {
   max: number;
   percent: number;
   weak_areas: string[];
+  /** Demand proxy — from search result / listing detail. */
+  num_favorers: number | null;
+  views: number | null;
+  /** Shop-level review count when shop fetch succeeded. */
+  shop_review_count: number | null;
 }
 
 export interface CompetitiveLandscapeEntry {
@@ -50,6 +55,12 @@ export interface CompetitiveLandscapeEntry {
   scored_count: number;
   /** Median SEO percent across the scored top N (0..1). */
   median_percent: number;
+  /** Median num_favorers across scored top N (demand proxy). */
+  median_favorers: number;
+  /** Median views across scored top N. */
+  median_views: number;
+  /** Median shop review_count across scored top N when shop data available. */
+  median_shop_reviews: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -170,6 +181,22 @@ export async function computeCompetitiveLandscape(
   });
   const failed = uniqueIds.length - successful;
 
+  // 2.5 Fetch shop review counts (deduped) for engagement proxy.
+  const uniqueShopIds = [
+    ...new Set(
+      [...detailsByIid.values()]
+        .map(d => d.shop_id)
+        .filter((id): id is number => typeof id === 'number' && id > 0)
+    )
+  ];
+  const shopFetches = await mapWithLimit(uniqueShopIds, 2, 200, id => getShop(id));
+  const reviewsByShopId = new Map<number, number>();
+  shopFetches.forEach((shop, i) => {
+    if (shop) {
+      reviewsByShopId.set(uniqueShopIds[i], shop.review_count);
+    }
+  });
+
   // 3. Score per keyword (using the keyword itself as primary_keyword context).
   const landscape: CompetitiveLandscapeEntry[] = [];
   for (const k of input.keywords) {
@@ -194,7 +221,10 @@ export async function computeCompetitiveLandscape(
         top_incumbents: [],
         gap_summary: `No incumbents could be scored for "${k}" (0 of ${top.length} listing fetches succeeded). Treat as data-unavailable rather than a real signal.`,
         scored_count: 0,
-        median_percent: 0
+        median_percent: 0,
+        median_favorers: 0,
+        median_views: 0,
+        median_shop_reviews: null
       });
       continue;
     }
@@ -202,6 +232,20 @@ export async function computeCompetitiveLandscape(
     const percents = scored.map(s => s.score.percent);
     const classification = classifyKeyword(percents);
     const medPercent = median(percents);
+    const favorers = scored.map(
+      s => s.details.num_favorers ?? s.result.num_favorers ?? 0
+    );
+    const views = scored.map(s => s.details.views ?? 0);
+    const shopReviews = scored
+      .map(s => {
+        const shopId = s.details.shop_id;
+        return shopId != null ? reviewsByShopId.get(shopId) ?? null : null;
+      })
+      .filter((r): r is number => r != null);
+    const medFavorers = median(favorers);
+    const medViews = median(views);
+    const medShopReviews =
+      shopReviews.length > 0 ? median(shopReviews) : null;
     const commonWeak = topNCommonWeakAreas(
       scored.map(s => s.score.weak_areas),
       3
@@ -220,7 +264,13 @@ export async function computeCompetitiveLandscape(
         score: s.score.total,
         max: s.score.max,
         percent: s.score.percent,
-        weak_areas: s.score.weak_areas
+        weak_areas: s.score.weak_areas,
+        num_favorers: s.details.num_favorers ?? s.result.num_favorers ?? null,
+        views: s.details.views ?? null,
+        shop_review_count:
+          s.details.shop_id != null
+            ? reviewsByShopId.get(s.details.shop_id) ?? null
+            : null
       }));
 
     const gap_summary =
@@ -233,7 +283,10 @@ export async function computeCompetitiveLandscape(
       top_incumbents: top3,
       gap_summary,
       scored_count: scored.length,
-      median_percent: medPercent
+      median_percent: medPercent,
+      median_favorers: medFavorers,
+      median_views: medViews,
+      median_shop_reviews: medShopReviews
     });
   }
 

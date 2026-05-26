@@ -4,6 +4,10 @@
 
 ## Current Focus
 
+### White-space engine (proof-of-mechanism shipped 2026-05-22)
+- [x] **White-space triangulation scoring** — `npm run score:whitespace` runs gap engine standalone on candidate-pool opportunities; persists `gap_classification`, `incumbent_engagement`, `supply_weakness`, `demand_combined`, `white_space_score`, `quadrant`, `gap_analysis` jsonb (migration 0009). Smoke-tested on 9 candidates.
+- [ ] **Broad Trending Now collector** — next step after matrix validation: `engine=google_trends_trending_now` for cross-category discovery (`category_id` 16 Shopping + 8 Hobbies & Leisure), then feed new keywords into this same white-space scorer.
+
 ### Drive first sale (both listings live, daily monitor capturing baseline)
 - [ ] Run `npm run monitor:listings` daily by hand for 3–5 days before scheduling cron — confirms baseline behavior, surfaces edge cases (state changes, sold_out, tag edits, etc.) per principle #7
 - [ ] First sale (validation milestone) — both listings active, awaiting market signal
@@ -59,6 +63,13 @@
 - [ ] Backup strategy for Supabase
 
 ## Done
+
+### White-space triangulation scoring (`feat: white-space triangulation scoring` commit)
+- [x] **`src/lib/whitespace-scoring.ts`** — demand × supply-quality matrix: `demand_combined = 0.35×external + 0.65×incumbent_engagement`; `supply_weakness` from gap classification + SEO median; `white_space_score = demand × supply_weakness`; quadrants WHITE_SPACE / RED_OCEAN / DEAD_ZONE / MATURE.
+- [x] **`src/jobs/score-whitespace.ts`** + `npm run score:whitespace` — scores candidate-pool opportunities (no listing, no brief): Etsy search → `computeCompetitiveLandscape` → triangulation → persist on `opportunities`.
+- [x] **`competitive.ts` extended** — top incumbents now carry `num_favorers`, `views`, `shop_review_count`; landscape entries carry `median_favorers`, `median_views`, `median_shop_reviews`.
+- [x] **Migration 0009** — whitespace columns + indexes on `opportunities`.
+- [x] **Smoke test** — 9 candidates scored in ~34s (~9 search + ~77 listing + ~60 shop Etsy calls; 5 listing + 3 shop 429s, still usable).
 
 ### Bunny size-guide listing photo (`feat: bunny size-guide listing photo` commit)
 - [x] **`size-guide.html`** — programmatic size comparison graphic matching `whats-included.html` visual language (cream `#EDE8E1`, sage `#6B7F5E`, Inter typography, HillwardStudio header/footer). **v2 (2026-05-22):** couch scale reference via `templates/assets/furniture/sofa.svg`, 13 px/in honest scale, hand-built (loop not trusted for curated assets). Rendered → `listing-photos/size-guide.png` (2000×2000). Registered as `size_grid`. See `DESIGN_AGENT_REQUIREMENTS.md`.

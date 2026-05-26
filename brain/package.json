@@ -9,6 +9,7 @@
     "collect:reddit": "tsx src/jobs/collect-reddit.ts",
     "collect:trends": "tsx src/jobs/collect-trends.ts",
     "score": "tsx src/jobs/score-opportunities.ts",
+    "score:whitespace": "tsx src/jobs/score-whitespace.ts",
     "seed:planneraddicts": "tsx src/jobs/seed-planneraddicts-decision.ts",
     "seed:listings": "tsx src/jobs/seed-listings.ts",
     "monitor:listings": "tsx src/jobs/monitor-listings.ts",
