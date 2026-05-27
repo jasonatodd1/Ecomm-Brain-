@@ -8,8 +8,18 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
     /* ============================================================
-       HillwardStudio Meal Planner — v2
+       HillwardStudio Meal Planner — v3
        One-page weekly meal grid + aisle-grouped grocery list.
+
+       v3 changes vs v2:
+         - Breakfast / Lunch / Dinner column headers centered (were
+           left-aligned, which floated them off the visual center of
+           the columns they label).
+         - Footer separator rule REMOVED. Same hierarchy problem the v2
+           aisle headers had: a structural divider that reads identical
+           to the Notes section's writing lines just above it. v3 lets
+           --footer-gap-above (now 7mm) + the muted stone color of the
+           footer text itself carry the demarcation.
 
        v2 changes vs v1:
          - Mid-page dashed "tear-line" REMOVED. The tear-off positioning
@@ -76,7 +86,11 @@
       /* Vertical rhythm */
       --header-gap-below: 7mm;
       --notes-gap-above:  6mm;
-      --footer-gap-above: 4mm;
+      --footer-gap-above: 7mm;  /* v3: was 4mm + a hairline rule +
+                                   4mm padding-top. Rule removed; this
+                                   gap is now the sole demarcation
+                                   between the last notes write-on line
+                                   and the muted footer microcopy. */
     }
 
     body[data-size="a4"] {
@@ -209,9 +223,8 @@
       letter-spacing: 0.24em;
       color: var(--slate);
       text-transform: uppercase;
-      padding-left: 2mm;
+      text-align: center;
     }
-    .meal-subheader > div:first-child { padding: 0; }
 
     .meal-days {
       flex: 1;
@@ -335,14 +348,19 @@
       border-bottom: var(--hairline) solid var(--sand);
     }
 
-    /* ============ Footer ============ */
+    /* ============ Footer ============ ============
+       v2 had a hairline rule above the footer microcopy. Removed in v3
+       for the same reason the honey aisle-rules were removed in v2: a
+       structural divider that reads identical to the writing lines of
+       the Notes section just above it. v3 lets the wider vertical gap
+       (--footer-gap-above) + the muted stone color carry the
+       demarcation. Stop adding lines that compete with elements that
+       already look distinct. */
     .footer {
       display: flex;
       align-items: baseline;
       justify-content: space-between;
-      padding-top: 4mm;
       margin-top: var(--footer-gap-above);
-      border-top: var(--hairline) solid var(--sand);
       font-size: 6pt;
       font-weight: 400;
       letter-spacing: 0.3em;

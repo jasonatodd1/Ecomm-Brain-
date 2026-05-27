@@ -4,10 +4,13 @@
 
 ## Current Focus
 
-### Meal planner asset v2 (shipped 2026-05-27)
+### Meal planner asset v3 (shipped 2026-05-27)
 - [x] **Parameterized HTML/CSS/Puppeteer template** — single source in `products/hillward-meal-planner/templates/index.html` parameterized by `data-start` (sun/mon) and `data-size` (letter/a4) attributes flipped by `src/render/meal-planner.ts` before each PDF render. 4 SKUs (`meal-planner-{sun|mon}-{letter|a4}.pdf`) rendered in ~5s total. `npm run build:meal-planner`.
 - [x] **`printable_pdf` asset kind** — migration 0011 + `assets.ts` constant. Distinct from `source_file` (master file behind a deliverable): a `printable_pdf` IS the customer-facing PDF for printable products (planners, trackers, charts).
-- [x] **4 SKUs linked to brief** `cb213bf4-5225-4bc9-b4ac-67f2167c9b8f` via `link:asset` — all four `printable_pdf` rows present in `assets`. v2 re-renders overwrite the same file paths; rows unchanged.
+- [x] **4 SKUs linked to brief** `cb213bf4-5225-4bc9-b4ac-67f2167c9b8f` via `link:asset` — all four `printable_pdf` rows present in `assets`. v2/v3 re-renders overwrite the same file paths; rows unchanged.
+- [x] **v2 → v3 polish** —
+  - BREAKFAST / LUNCH / DINNER column headers centered over their columns (were left-aligned and floated off the visual center).
+  - Footer separator rule removed. Same hierarchy problem as v2's aisle headers: a structural divider that reads identical to the Notes section's writing lines just above it. v3 lets `--footer-gap-above` (now 7mm) + the muted stone color of the footer microcopy carry the demarcation.
 - [x] **v1 → v2 fixes** —
   - Mid-page dashed "perforation" between meal grid and grocery REMOVED. It implied tearing the page in half, which destroys the one-sheet shop-with-it workflow that is the wedge. Tear-off positioning now lives only in listing copy + hero photo (whole sheet tears off a pad).
   - Grocery aisle hierarchy: removed the honey rule above each aisle label. v1's parallel honey-rule + sand-writing-rules read as one stack of similar horizontal lines; section structure was lost. v2 carries the break with bold uppercase typography + 5mm whitespace between sections.
