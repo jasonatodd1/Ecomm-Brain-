@@ -15,6 +15,7 @@
     "seed:planneraddicts": "tsx src/jobs/seed-planneraddicts-decision.ts",
     "seed:meal-planner": "tsx src/jobs/seed-meal-planner-decision.ts",
     "seed:listings": "tsx src/jobs/seed-listings.ts",
+    "register:meal-planner-listing": "tsx src/jobs/register-meal-planner-listing.ts",
     "monitor:listings": "tsx src/jobs/monitor-listings.ts",
     "reclassify:reddit": "tsx src/jobs/reclassify-reddit-signals.ts",
     "research": "tsx src/jobs/research-decision.ts",

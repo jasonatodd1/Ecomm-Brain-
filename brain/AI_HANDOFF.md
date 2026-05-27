@@ -2,7 +2,7 @@
 
 > Paste this entire document into a fresh Claude conversation to pick up where the previous one left off. Verify-flagged items (`[VERIFY]`) are values the AI could not confirm from code/Supabase alone and should be re-checked by the operator.
 
-Last updated: 2026-05-27. Reflects meal planner **7-photo listing set complete** (01–04 fal UI + 05–07 programmatic) + asset v4 + v5 brief.
+Last updated: 2026-05-27. Reflects meal planner **live on Etsy** (`4512363257`) + 7-photo set + asset v4 + v5 brief.
 
 ---
 
@@ -28,7 +28,7 @@ We are currently at the **Product → List** stage for the first two products. T
 - **Shop name:** HillwardStudio
 - **Shop URL:** `https://www.etsy.com/shop/HillwardStudio` [VERIFY — code does not pin the canonical URL]
 - **Seller account:** opened
-- **Live listings:** **2.** Both went live shortly before this conversation; backfilled into Supabase via `npm run seed:listings` + first snapshot via `npm run monitor:listings`.
+- **Live listings:** **3.** Meal planner published 2026-05-27; bunny + A5 calendar from 2026-05-21. All backfilled via `npm run seed:listings` + snapshots via `npm run monitor:listings` / `register:meal-planner-listing`.
 - **Reviews:** 0 (new shop — explicit risk factor in every brief; still applies)
 - **Monitoring status:** built and manually validated. Daily snapshots via `monitor-listings.ts` are operator-triggered for now — cron deferred per principle #7 until 3–5 days of manual runs confirm baseline behavior.
 
@@ -36,6 +36,7 @@ We are currently at the **Product → List** stage for the first two products. T
 
 | Product | Etsy ID | Price | Opportunity | Brief | First snapshot |
 |---|---|---|---|---|---|
+| Meal Planner Printable with Grocery List \| One-Page Weekly Meal Plan + Aisle-Grouped Shopping List PDF… | `4512363257` | $2.00 | `a4376656…` (meal planner printable) | `cb213bf4` (v5) | 0 views / 0 favorers @ 2026-05-27 |
 | A5 Monthly Calendar Printable with Notes Pages \| Minimalist Undated Planner Inserts… | `4508059444` | $3.49 | `c3fa0a4d…` (planneraddicts Reddit buyer) | `0834bacd` (proceed, 0.72) | 6 views / 0 favorers / 13 tags / `active` @ 2026-05-21 20:41 UTC |
 | Vintage Bunny Nursery Wall Art Printable \| Watercolor Rabbit Sketch \| Gender Neutral Baby Room Decor… | `4508704536` | $4.49 | `d7750211…` (nursery wall art printable) | `ea836ab6` (proceed, 0.62) | 4 views / 0 favorers / 12 tags / `active` @ 2026-05-21 20:41 UTC |
 

@@ -17,11 +17,17 @@ import { log } from '../lib/log.js';
 interface SeedListing {
   etsy_listing_id: string;
   note: string; // human-readable label for the console output; not stored
+  opportunity_id?: string;
 }
 
 const SEED_LISTINGS: SeedListing[] = [
   { etsy_listing_id: '4508059444', note: 'A5 Monthly Calendar Printable' },
-  { etsy_listing_id: '4508704536', note: 'Vintage Bunny Nursery Wall Art' }
+  { etsy_listing_id: '4508704536', note: 'Vintage Bunny Nursery Wall Art' },
+  {
+    etsy_listing_id: '4512363257',
+    note: 'Meal Planner Printable with Grocery List',
+    opportunity_id: 'a4376656-6b32-4b0a-a223-bfd32d43f23f',
+  },
 ];
 
 async function main(): Promise<void> {
@@ -49,12 +55,15 @@ async function main(): Promise<void> {
       continue;
     }
 
+    const insertRow: Record<string, unknown> = {
+      etsy_listing_id: l.etsy_listing_id,
+      status: 'active',
+    };
+    if (l.opportunity_id) insertRow.opportunity_id = l.opportunity_id;
+
     const { data: inserted_row, error: insertErr } = await supabase
       .from('listings')
-      .insert({
-        etsy_listing_id: l.etsy_listing_id,
-        status: 'active'
-      })
+      .insert(insertRow)
       .select('id')
       .single();
 

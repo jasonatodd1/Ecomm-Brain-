@@ -1,9 +1,9 @@
 # Meal Planner — Listing Package v1 (Etsy)
 
 > **brief_id:** `cb213bf4-5225-4bc9-b4ac-67f2167c9b8f` (v5, research-v3.2)  
-> **listing_id:** _(new — manual publish)_  
+> **listing_id:** `6986ce3a-f653-46ca-a5d5-9d2c6b13b5aa` · **etsy_listing_id:** `4512363257` · [live](https://www.etsy.com/listing/4512363257/meal-planner-printable-with-grocery-list)  
 > **agent_run_id:** `d9d0bca7-f289-4823-9667-c4ea51a227a5`  
-> **Generated:** 2026-05-27 | **package_version:** `listing-v1` | **cost:** $0.00
+> **Generated:** 2026-05-27 | **Published:** 2026-05-27 | **package_version:** `listing-v1` | **cost:** $0.00
 
 ---
 
@@ -72,7 +72,21 @@ Deliverables registered as `printable_pdf` assets against this brief.
 
 - Full structured `PublishPackage` → `agent_runs.metadata.package` (run `d9d0bca7-…`)
 - Mirror copy → `brain/packages/2026-05-27-cb213bf4-etsy.md`
-- **No `listings` row yet** — v1 is package-only; bunny had an existing listing row. Create listing at manual publish.
+- **`listings` row:** `6986ce3a-f653-46ca-a5d5-9d2c6b13b5aa` · Etsy `4512363257` · opportunity `a4376656…` · 11 assets linked via `npm run register:meal-planner-listing`
+
+### Photo order audit (2026-05-27, live listing)
+
+| Etsy slot | Matched asset | Status |
+|---:|---|---|
+| 1 | 01-hero | ✅ |
+| 2 | 02-lifestyle-in-use | ✅ |
+| 3 | 03-grocery-store | ✅ |
+| 4 | 04-kitchen | ✅ |
+| 5 | **06-aisle-headers** | ⚠️ should be slot 6 |
+| 6 | **05-pdf-preview** | ⚠️ should be slot 5 |
+| 7 | 07-whats-included | ✅ |
+
+**Optional fix:** swap Etsy photos #5 and #6 so PDF preview precedes aisle detail crop (recommended conversion order). All 7 photos present — only these two are transposed.
 
 ---
 
