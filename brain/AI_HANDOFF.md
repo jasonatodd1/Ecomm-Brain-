@@ -2,7 +2,7 @@
 
 > Paste this entire document into a fresh Claude conversation to pick up where the previous one left off. Verify-flagged items (`[VERIFY]`) are values the AI could not confirm from code/Supabase alone and should be re-checked by the operator.
 
-Last updated: 2026-05-27. Reflects **Research Agent v3.2** + meal planner v5 brief + **meal planner asset v4** + **meal planner listing photos** (4 fal UI: hero + 3 lifestyle; 3 programmatic: pdf-preview, aisle-detail, whats-included grid).
+Last updated: 2026-05-27. Reflects meal planner **7-photo listing set complete** (01–04 fal UI + 05–07 programmatic) + asset v4 + v5 brief.
 
 ---
 
@@ -176,7 +176,9 @@ Root: `brain/`. All paths below are relative to that.
 
 **Listing-photo split for structured-document products (bunny precedent, meal planner application):** Programmatic technicals (product flat at print resolution, tight detail crops of differentiating features, what's-included grid) go through Puppeteer + sharp from the same source template. Lifestyle composites (page-in-hand at grocery store, planner on kitchen counter, etc.) are out of scope for Cursor — those go through fal UI by the operator using the programmatic `pdf-preview.png` as compositing input. The split mirrors what was done for the bunny (programmatic size-guide + artwork-flat + whats-included via Cursor; lifestyle-* JPGs via fal UI). Code-generated assets are deterministic + crisp + cheap to regenerate when the underlying template changes; fal composites are higher-touch and stay manual.
 
-**Listing photo naming convention (meal planner, 2026-05-27):** Files live in `products/<slug>/listing-photos/`. Numeric prefix sets Etsy display order: `meal-planner-NN-{role}.{ext}` — e.g. `meal-planner-01-hero.png`, `meal-planner-02-lifestyle-in-use.png`, `meal-planner-03-lifestyle-grocery-store.jpg`, `meal-planner-04-lifestyle-kitchen.png`. Register via `link:asset` with `kind=hero` for slot 1 and `kind=lifestyle` for lifestyle slots; `source=fal_ui` for operator-composited photos, `source=render_planner` for programmatic renders. Store `display_order` + `role` in asset `metadata` JSON for downstream Listing Agent ordering.
+**Listing photo naming convention (meal planner, 2026-05-27):** Files live in `products/<slug>/listing-photos/`. Numeric prefix sets Etsy display order: `meal-planner-NN-{role}.{ext}` — slots 01–04 fal UI lifestyle (hero + 3 lifestyle), slots 05–07 programmatic (pdf-preview, detail-aisle-headers, whats-included). Register via `link:asset` with `kind=hero` (01), `kind=lifestyle` (02–04), `kind=artwork_flat` (05), `kind=lifestyle_detail` (06), `kind=whats_included` (07). `source=fal_ui` for operator-composited photos, `source=render_planner` for programmatic renders (`npm run render:meal-planner-photos`). Store `display_order` + `role` in asset `metadata` JSON for downstream Listing Agent ordering.
+
+**Programmatic listing photo conventions (structured-document products):** Three renders from the same HTML/CSS template via `meal-planner-photos.ts`: (1) full-page screenshot at 300dpi (`deviceScaleFactor: 3.125` → 2550×3300 Letter) for the product-flat shot; (2) DOM-bounds crop via `sharp.extract()` on the grocery section for structural differentiation; (3) 2×2 SKU composite built from base64-embedded thumbnails in a standalone HTML grid. Combined with fal UI lifestyle composites (01–04) for the full 7-photo Etsy set.
 - **`render-graphic.ts`** — `npm run render:graphic <input.html> <output.{png,jpg}>`. Generic screenshot tool for listing assets. Output format is inferred from the file extension: `.jpg`/`.jpeg` → JPEG quality 92, anything else → PNG. Used for the bunny "What's Included" graphic at 2000×2000.
 
 ### `src/lib/`

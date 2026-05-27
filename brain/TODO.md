@@ -24,12 +24,13 @@
   - `03-lifestyle-grocery-store` — hand holding planner at produce aisle (workflow wedge)
   - `04-lifestyle-kitchen` — planner on kitchen counter with cookbook + bowl
   All linked to brief `cb213bf4` via `link:asset` (kind: hero / lifestyle, source: fal_ui).
-- [x] **Listing photos (programmatic)** — 3 shipped 2026-05-27 via `npm run render:meal-planner-photos`:
-  - `pdf-preview.png` (artwork_flat, 2550×3300 @ 300dpi) — canonical mon-letter v4 page; doubles as listing photo + fal compositing input
-  - `detail-aisle-headers.png` (lifestyle_detail, 1001×2339) — tight crop of all 6 aisle headers, calls out the structural innovation
-  - `whats-included.png` (whats_included, 3000×3000) — 2×2 SKU grid composite (Sun/Mon × Letter/A4) with labels
-  All linked to brief `cb213bf4` via `link:asset`. No new asset kinds needed — reused existing artwork_flat / lifestyle_detail / whats_included from the bunny.
-- [ ] **Listing Agent → publish** for meal planner — 7 listing photos registered (4 fal UI + 3 programmatic); ready once operator approves photo set + ordering.
+- [x] **Listing photos (programmatic)** — 3 registered 2026-05-27 via `npm run render:meal-planner-photos`, numbered 05–07 in Etsy display order:
+  - `meal-planner-05-pdf-preview.png` (artwork_flat, 2550×3300 @ 300dpi) — canonical mon-letter v4 page flat
+  - `meal-planner-06-detail-aisle-headers.png` (lifestyle_detail, 1001×2339) — tight crop of all 6 aisle headers
+  - `meal-planner-07-whats-included.png` (whats_included, 3000×3000) — 2×2 SKU grid composite (Sun/Mon × Letter/A4) with labels
+  All linked to brief `cb213bf4` via `link:asset` with `metadata.display_order` 5–7. Supersedes unprefixed `pdf-preview.png` / `detail-aisle-headers.png` / `whats-included.png` (old asset rows removed).
+- [x] **Listing photo set complete (7 total)** — 01–04 fal UI + 05–07 programmatic, all `meal-planner-NN-{role}.{ext}` under `products/hillward-meal-planner/listing-photos/`. Ready for Listing Agent run.
+- [ ] **Listing Agent → publish** for meal planner.
 
 ### Research Agent v3.2 + meal planner v5 brief (shipped 2026-05-27)
 - [x] **Multi-wedge differentiation thesis** — `differentiation_thesis.wedges[]` with per-wedge grounding tags (`buyer-voice-backed` / `partial-buyer-voice-backed` / `incumbent-inferred` / `speculative`). Each wedge cites supporting_evidence + counter_evidence so the grounding discipline does not depend on careful prose. Wedge type taxonomy: workflow / customization / aesthetic / audience / pricing / other. See `RESEARCH_AGENT.md` §4.

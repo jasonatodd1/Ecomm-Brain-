@@ -3,7 +3,7 @@
 // Produces 3 deliverables from the v4 template, mirroring the bunny
 // listing-photos pattern but adapted for a structured-document product:
 //
-//   1. pdf-preview.png         (kind: artwork_flat)
+//   1. meal-planner-05-pdf-preview.png         (kind: artwork_flat, display_order: 5)
 //      Canonical mon-start / US Letter page, rendered straight from
 //      HTML at deviceScaleFactor 3.125 → ~2550×3300px (Letter at 300dpi,
 //      long edge 3300px > the 3000 Etsy ask). The cream off-white
@@ -11,7 +11,7 @@
 //      photo of the actual product flat and (b) the source image
 //      Jason composites into lifestyle scenes in fal UI.
 //
-//   2. detail-aisle-headers.png (kind: lifestyle_detail)
+//   2. meal-planner-06-detail-aisle-headers.png (kind: lifestyle_detail, display_order: 6)
 //      Tight crop of the grocery section showing all 6 aisle headers
 //      (Produce / Proteins / Dairy / Pantry / Freezer / Other) with
 //      a thin strip of meal-grid context on the left to make the
@@ -20,7 +20,7 @@
 //      innovation obvious." Captured by reading the bounding rect of
 //      .grocery from the rendered DOM and using sharp.extract().
 //
-//   3. whats-included.png      (kind: whats_included)
+//   3. meal-planner-07-whats-included.png      (kind: whats_included, display_order: 7)
 //      2×2 composite of all 4 SKU page-thumbnails with labels
 //      (Sun-start Letter / Mon-start Letter / Sun-start A4 / Mon-start
 //      A4). Built by rendering each SKU as a base64 PNG thumbnail and
@@ -195,7 +195,7 @@ function describe(p: string): { sizeKb: number } {
 // 1. pdf-preview.png — canonical product flat at 300dpi
 // ------------------------------------------------------------------
 async function renderPdfPreview(browser: Browser): Promise<RenderResult> {
-  const filename = 'pdf-preview.png';
+  const filename = 'meal-planner-05-pdf-preview.png';
   const outputPath = path.join(PHOTOS_DIR, filename);
 
   const page = await preparePage(browser, CANONICAL_SKU, HI_DPI_SCALE);
@@ -220,7 +220,7 @@ async function renderPdfPreview(browser: Browser): Promise<RenderResult> {
 // 2. detail-aisle-headers.png — tight grocery-section crop
 // ------------------------------------------------------------------
 async function renderAisleDetail(browser: Browser): Promise<RenderResult> {
-  const filename = 'detail-aisle-headers.png';
+  const filename = 'meal-planner-06-detail-aisle-headers.png';
   const outputPath = path.join(PHOTOS_DIR, filename);
 
   const page = await preparePage(browser, CANONICAL_SKU, HI_DPI_SCALE);
@@ -289,7 +289,7 @@ async function renderAisleDetail(browser: Browser): Promise<RenderResult> {
 // 3. whats-included.png — 2x2 SKU grid composite
 // ------------------------------------------------------------------
 async function renderWhatsIncluded(browser: Browser): Promise<RenderResult> {
-  const filename = 'whats-included.png';
+  const filename = 'meal-planner-07-whats-included.png';
   const outputPath = path.join(PHOTOS_DIR, filename);
 
   // First: render every SKU as a moderately-sized PNG thumbnail and
