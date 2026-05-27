@@ -310,21 +310,34 @@ listing: {
 }
 ```
 
-### `differentiation_thesis` — load-bearing product-gap axis (research-v3)
+### `differentiation_thesis` — load-bearing product-gap axis (research-v3 / v3.1)
 
-Tuning Pass 3 adds a top-level brief field that is a **design constraint on the asset**, not just listing copy. See `RESEARCH_AGENT.md` for the full dual-axis methodology (SEO-gap + product-gap).
+Tuning Pass 3 adds a top-level brief field that is a **design constraint on the asset**, not just listing copy. See `RESEARCH_AGENT.md` for the full dual-axis methodology (SEO-gap + product-gap) and the dual-incumbent-selection design (research-v3.1).
 
 ```ts
 differentiation_thesis: {
-  competitor_offerings: Array<{ incumbent_id: string; product_features: ProductFeatures }>,
+  competitor_offerings: Array<{
+    incumbent_id: string;
+    product_features: ProductFeatures;
+    relevance_reason?: string;       // v3.1 — why classifier kept this incumbent
+  }>,
   buyer_pain_signals: Array<{
     theme: string,
     frequency_indicator: string,
     paraphrased_examples: string[]  // NEVER verbatim Etsy review text
   }>,
-  our_differentiation: string,  // specific + grounded; honest if unsupported
+  our_differentiation: string,       // v3.1 prefix-tagged "(buyer-voice-backed:" or "(incumbent-inferred:"
   positioning: string,
-  one_line_claim: string
+  one_line_claim: string,
+  relevance_filter?: {               // v3.1 — operator-facing filter audit
+    candidate_pool_size: number,
+    classified_count: number,
+    kept_count: number,
+    dropped_count: number,
+    pool_exhausted: boolean,
+    data_thinness: 'high' | 'medium' | 'low',
+    classifications: Array<{ listing_id, title, num_favorers, relevant, reason }>
+  }
 }
 ```
 

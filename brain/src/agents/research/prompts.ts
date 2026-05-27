@@ -3,7 +3,8 @@ import type {
   EtsySearchResult,
   NicheMemoryRow,
   BuyerPainSignal,
-  IncumbentOffering
+  IncumbentOffering,
+  RelevanceFilterReport
 } from './types.js';
 import type { MarketAggregates } from './aggregates.js';
 import type { CompetitiveLandscapeEntry } from './competitive.js';
@@ -171,10 +172,14 @@ function formatCompetitiveLandscape(
 
 function formatIncumbentIntel(
   offerings: IncumbentOffering[],
-  buyerPainSignals: BuyerPainSignal[]
+  buyerPainSignals: BuyerPainSignal[],
+  relevanceFilter?: RelevanceFilterReport
 ): string {
   if (offerings.length === 0) {
-    return '(No incumbent product intelligence — treat product-gap axis as data-unavailable.)';
+    const note = relevanceFilter
+      ? `(Relevance filter classified ${relevanceFilter.classified_count} candidates from a pool of ${relevanceFilter.candidate_pool_size}; ${relevanceFilter.kept_count} were same-niche. Product-gap axis is unavailable for this brief — rely on the SEO-gap axis and state this limitation honestly in differentiation_thesis.our_differentiation.)`
+      : '(No incumbent product intelligence — treat product-gap axis as data-unavailable.)';
+    return note;
   }
 
   const lines: string[] = [
@@ -183,12 +188,32 @@ function formatIncumbentIntel(
     ''
   ];
 
-  lines.push('== COMPETITOR PRODUCT FEATURES (top 3 incumbents) ==');
+  if (relevanceFilter) {
+    lines.push('== RELEVANCE FILTER (research-v3.1) ==');
+    lines.push(
+      `Candidate pool: ${relevanceFilter.candidate_pool_size} listings (top-by-favorers across all keywords). Classified: ${relevanceFilter.classified_count}. Kept: ${relevanceFilter.kept_count}. Dropped: ${relevanceFilter.dropped_count}. Pool exhausted: ${relevanceFilter.pool_exhausted ? 'YES — fewer than 3 same-niche incumbents available' : 'no'}. Data thinness (signal review density): ${relevanceFilter.data_thinness.toUpperCase()}.`
+    );
+    if (relevanceFilter.dropped_count > 0) {
+      const drops = relevanceFilter.classifications
+        .filter(c => !c.relevant)
+        .slice(0, 5);
+      lines.push('Sample drops (off-niche, intentionally excluded):');
+      drops.forEach(d =>
+        lines.push(`  - ${d.listing_id} (${d.num_favorers ?? '?'}★): ${d.reason}`)
+      );
+    }
+    lines.push('');
+  }
+
+  lines.push('== COMPETITOR PRODUCT FEATURES (relevance-filtered, top by favorers within same-niche set) ==');
   offerings.forEach((o, i) => {
     const pf = o.product_features;
     lines.push(
       `[${i + 1}] incumbent_id=${o.incumbent_id} — ${o.title.slice(0, 100)}`
     );
+    if (o.relevance_reason) {
+      lines.push(`    relevance: ${o.relevance_reason}`);
+    }
     lines.push(`    sections: ${pf.sections.join('; ') || '(none stated)'}`);
     lines.push(`    sizes: ${pf.sizes.join(', ') || 'unknown'}`);
     lines.push(`    formats: ${pf.formats.join(', ') || 'unknown'}`);
@@ -230,6 +255,7 @@ export function buildSynthesisPrompt(
   incumbentIntel: {
     offerings: IncumbentOffering[];
     buyer_pain_signals: BuyerPainSignal[];
+    relevance_filter?: RelevanceFilterReport;
   } = { offerings: [], buyer_pain_signals: [] }
 ): string {
   const ctx = decision.context;
@@ -272,14 +298,14 @@ This is the brain's strategic edge: demand × (1 / supply quality), not demand a
 - Output the per-keyword classifications + top_incumbents VERBATIM as listing.competitive_landscape — do not invent or alter scores; they are the engine's deterministic output.
 
 == PRODUCT-GAP INTELLIGENCE (Tuning Pass 3 — load-bearing differentiation thesis) ==
-${formatIncumbentIntel(incumbentIntel.offerings, incumbentIntel.buyer_pain_signals)}
+${formatIncumbentIntel(incumbentIntel.offerings, incumbentIntel.buyer_pain_signals, incumbentIntel.relevance_filter)}
 
-This is the SECOND strategic axis alongside SEO-gap: what incumbents actually SHIP vs what buyers WISH they shipped. The differentiation_thesis you output becomes a DESIGN CONSTRAINT on the asset — not just listing copy.
+This is the SECOND strategic axis alongside SEO-gap: what same-niche incumbents actually SHIP vs what buyers WISH they shipped. The differentiation_thesis you output becomes a DESIGN CONSTRAINT on the asset — not just listing copy. **The incumbents listed above passed a Haiku relevance filter so they are real same-niche competitors; the SEO landscape above is separately scored on the unfiltered top-by-favorers set (different question, different answer).**
 
 Rules for differentiation_thesis:
-- competitor_offerings: copy incumbent_id + product_features from the COMPETITOR PRODUCT FEATURES section above (summarize the typical pattern in your reasoning, but preserve the structured objects).
+- competitor_offerings: copy incumbent_id + product_features from the COMPETITOR PRODUCT FEATURES section above (summarize the typical pattern in your reasoning, but preserve the structured objects). Do NOT alter incumbent_id strings.
 - buyer_pain_signals: copy the paraphrased themes above VERBATIM. NEVER add verbatim Etsy review text or direct quotes.
-- our_differentiation: MUST cite a SPECIFIC pain signal or incumbent product gap by name. Forbidden: generic claims ("more beautiful", "cleaner design", "better quality"). If review data is thin and you cannot ground a concrete product-level difference, say so honestly (e.g., "Insufficient review signal to support a product-level claim beyond SEO execution — differentiation is supply-side only").
+- our_differentiation: MUST cite a SPECIFIC pain signal or incumbent product gap by name. Forbidden: generic claims ("more beautiful", "cleaner design", "better quality"). When the data is thin, BE HONEST in this field about the grounding source: lead with "(buyer-voice-backed:" when at least one cited theme has frequency ≥2 mentions, OR "(incumbent-inferred:" when relying mostly on incumbent product structure rather than reviews. If data is too thin even for incumbent inference (data_thinness LOW + pool_exhausted true), say so plainly.
 - positioning: the buyer-facing angle (e.g., "ADHD-friendly with visual meal-type cues", "family-of-5 portion planning", "premium minimalist for design-conscious meal preppers").
 - one_line_claim: single sentence suitable for the listing hook or title — must reflect our_differentiation specifically.
 

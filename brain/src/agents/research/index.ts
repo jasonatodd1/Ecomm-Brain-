@@ -224,18 +224,21 @@ export async function researchDecision(
       topN: 10
     });
 
-    // Step 6.7 — Incumbent intel: review mining + product feature extraction.
-    // Product-gap axis (v3) complements SEO-gap from step 6.6.
+    // Step 6.7 — Incumbent intel: relevance filter → review mining → feature
+    // extraction. Product-gap axis (v3.1) — operates on a Haiku-classified
+    // same-niche set, NOT top-by-favorers (SEO-gap above is the unfiltered lens).
     currentStep = 'incumbent_intel';
-    const preferredKeyword =
-      typeof ctx['primary_keyword'] === 'string'
-        ? ctx['primary_keyword']
-        : keywords[0];
+    const primaryKeywordForIntel =
+      (typeof ctx['primary_keyword'] === 'string' &&
+        ctx['primary_keyword'].length > 0 &&
+        ctx['primary_keyword']) ||
+      keywords[0];
     const incumbentIntel = await runIncumbentIntel({
       landscape: competitive.landscape,
       listingDetailsCache: competitive.listingDetailsCache,
       resultsByKeyword,
-      preferredKeyword
+      primaryKeyword: primaryKeywordForIntel,
+      decision
     });
     totalCostUsd += incumbentIntel.stats.haiku_cost_usd;
 
@@ -249,7 +252,8 @@ export async function researchDecision(
       competitive.landscape,
       {
         offerings: incumbentIntel.offerings,
-        buyer_pain_signals: incumbentIntel.buyer_pain_signals
+        buyer_pain_signals: incumbentIntel.buyer_pain_signals,
+        relevance_filter: incumbentIntel.relevance_filter
       }
     );
 
@@ -307,6 +311,28 @@ export async function researchDecision(
     }
     const brief = validateBrief(briefRaw);
 
+    // Step 7.4 — Hydrate deterministic product-gap metadata onto the brief
+    // post-synthesis. The relevance_filter report is data we computed in
+    // step 6.7; rather than ask Opus to copy it verbatim (lossy + costly),
+    // we attach it server-side so the brief is the single source of truth.
+    if (brief.differentiation_thesis) {
+      brief.differentiation_thesis.relevance_filter =
+        incumbentIntel.relevance_filter;
+      // Backfill relevance_reason on competitor_offerings entries that match
+      // a classification (Opus may emit a subset or rephrase ids).
+      const reasonById = new Map(
+        incumbentIntel.relevance_filter.classifications
+          .filter(c => c.relevant)
+          .map(c => [c.listing_id, c.reason])
+      );
+      for (const offering of brief.differentiation_thesis.competitor_offerings) {
+        if (!offering.relevance_reason) {
+          const reason = reasonById.get(offering.incumbent_id);
+          if (reason) offering.relevance_reason = reason;
+        }
+      }
+    }
+
     // Step 7.5 — Drift detection: trust computed aggregates over LLM output
     await reconcileNumericDrift(brief, aggregates, decisionId);
 
@@ -329,6 +355,7 @@ export async function researchDecision(
       incumbent_intel: {
         offerings: incumbentIntel.offerings,
         buyer_pain_signals: incumbentIntel.buyer_pain_signals,
+        relevance_filter: incumbentIntel.relevance_filter,
         stats: incumbentIntel.stats
       },
       competitive_stats: competitive.stats

@@ -64,12 +64,35 @@ export function renderBriefAsMarkdown(
     lines.push(`**Our differentiation:** ${dt.our_differentiation}`);
     lines.push('');
 
+    // Relevance filter (v3.1+) — separates product-gap from SEO-gap selection.
+    if (dt.relevance_filter) {
+      const rf = dt.relevance_filter;
+      lines.push('### Relevance Filter (product-gap incumbent selection)');
+      lines.push('');
+      lines.push(
+        `Candidate pool ${rf.candidate_pool_size} → classified ${rf.classified_count} → kept **${rf.kept_count}** / dropped ${rf.dropped_count}. ${rf.pool_exhausted ? '**Pool exhausted** — fewer than 3 same-niche incumbents available even after widening. ' : ''}Data thinness: **${rf.data_thinness.toUpperCase()}**.`
+      );
+      lines.push('');
+      const dropped = rf.classifications.filter(c => !c.relevant);
+      if (dropped.length > 0) {
+        lines.push('**Dropped (off-niche, intentionally excluded from product-gap):**');
+        dropped.slice(0, 10).forEach(d => {
+          const fav = d.num_favorers != null ? ` (${d.num_favorers}★)` : '';
+          lines.push(`- \`${d.listing_id}\`${fav} — ${d.reason}`);
+        });
+        lines.push('');
+      }
+    }
+
     if (dt.competitor_offerings.length > 0) {
-      lines.push('### Competitor Offerings');
+      lines.push('### Competitor Offerings (relevance-filtered)');
       lines.push('');
       dt.competitor_offerings.forEach((o, i) => {
         const pf = o.product_features;
         lines.push(`${i + 1}. **${o.incumbent_id}**`);
+        if (o.relevance_reason) {
+          lines.push(`   - *Relevance:* ${o.relevance_reason}`);
+        }
         lines.push(`   - Sections: ${pf.sections.join('; ') || '(none)'}`);
         lines.push(`   - Sizes: ${pf.sizes.join(', ') || 'unknown'}`);
         lines.push(`   - Formats: ${pf.formats.join(', ') || 'unknown'}`);

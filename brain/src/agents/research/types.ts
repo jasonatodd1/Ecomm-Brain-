@@ -250,6 +250,11 @@ export interface IncumbentOffering {
     signal_count: number;
     note?: string;
   };
+  /**
+   * Why the relevance classifier kept this incumbent in the product-gap set
+   * (research-v3.1+). Absent on briefs from v3 where selection was top-by-favorers only.
+   */
+  relevance_reason?: string;
 }
 
 export interface BuyerPainSignal {
@@ -259,17 +264,43 @@ export interface BuyerPainSignal {
   paraphrased_examples: string[];
 }
 
+export interface RelevanceClassification {
+  listing_id: string;
+  title: string;
+  num_favorers: number | null;
+  relevant: boolean;
+  reason: string;
+}
+
+export interface RelevanceFilterReport {
+  candidate_pool_size: number;
+  classified_count: number;
+  kept_count: number;
+  dropped_count: number;
+  /** True when we exhausted the pool without reaching the relevance target. */
+  pool_exhausted: boolean;
+  /** "high" (≥30 total signal-eligible reviews), "medium" (10-29), "low" (<10). */
+  data_thinness: 'high' | 'medium' | 'low';
+  classifications: RelevanceClassification[];
+}
+
 export interface DifferentiationThesis {
-  /** Typical offering pattern across top incumbents (Haiku-extracted features). */
+  /** Typical offering pattern across relevance-filtered incumbents. */
   competitor_offerings: Array<{
     incumbent_id: string;
     product_features: ProductFeatures;
+    relevance_reason?: string;
   }>;
   buyer_pain_signals: BuyerPainSignal[];
   /** Concrete product-level difference grounded in pain signals; honest if unsupported. */
   our_differentiation: string;
   positioning: string;
   one_line_claim: string;
+  /**
+   * Operator-facing transparency on how the product-gap incumbent set was selected
+   * (research-v3.1+). Absent on briefs from v3.
+   */
+  relevance_filter?: RelevanceFilterReport;
 };
 
 export interface DecisionRecord {

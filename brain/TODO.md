@@ -4,10 +4,14 @@
 
 ## Current Focus
 
+### Research Agent v3.1 + meal planner v4 brief (shipped 2026-05-27)
+- [x] **Incumbent relevance filter** — product-gap analysis now classifies candidate pool via Haiku and operates on relevance-confirmed same-niche incumbents only. SEO-gap analysis unchanged (top-by-favorers). Pool: 20→40 with expansion; target 3 relevant; honest data_thinness reporting (high/medium/low). See `RESEARCH_AGENT.md` §3.
+- [x] **Meal planner v4 brief** — re-run on relevance-filtered set surfaced MyLifePlans/PlansByChloe/MarrMarStudio (real meal planners) with 12 buyer-voice signal reviews vs v3's 3. Single-page+aisle-grouped thesis confirmed and refined.
+- [ ] **Asset creation decision** — proceed on meal planner v4 brief or pivot based on differentiation thesis quality.
+
 ### Research Agent v3 + meal planner brief (shipped 2026-05-22)
 - [x] **Research Agent upgrade** — reviews mining (`getListingReviews`), Haiku product feature extraction, load-bearing `differentiation_thesis` (research-v3). See `RESEARCH_AGENT.md`.
 - [x] **Meal planner printable v3 brief** — `npm run seed:meal-planner` + `npm run research:meal-planner`.
-- [ ] **Asset creation decision** — proceed on meal planner v3 brief or pivot based on differentiation thesis quality.
 
 ### White-space engine (proof-of-mechanism shipped 2026-05-22)
 - [x] **White-space triangulation scoring** — `npm run score:whitespace` runs gap engine standalone on candidate-pool opportunities; persists gap fields (migration 0009). Smoke-tested on 9 seed candidates.
