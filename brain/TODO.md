@@ -30,7 +30,8 @@
   - `meal-planner-07-whats-included.png` (whats_included, 3000×3000) — 2×2 SKU grid composite (Sun/Mon × Letter/A4) with labels
   All linked to brief `cb213bf4` via `link:asset` with `metadata.display_order` 5–7. Supersedes unprefixed `pdf-preview.png` / `detail-aisle-headers.png` / `whats-included.png` (old asset rows removed).
 - [x] **Listing photo set complete (7 total)** — 01–04 fal UI + 05–07 programmatic, all `meal-planner-NN-{role}.{ext}` under `products/hillward-meal-planner/listing-photos/`. Ready for Listing Agent run.
-- [ ] **Listing Agent → publish** for meal planner.
+- [x] **Listing Agent v1 run** — `npm run list:package -- --brief-id=cb213bf4-5225-4bc9-b4ac-67f2167c9b8f` (run `d9d0bca7-…`). SEO 83/90 (92%, beats incumbents). Package at `products/hillward-meal-planner/listing-package-v1.md` + `packages/2026-05-27-cb213bf4-etsy.md`. Persisted to `agent_runs.metadata.package`.
+- [ ] **Manual publish review** — operator: set price (~$3.49), upload all 7 photos in display_order, confirm taxonomy 354 vs Digital Downloads, attach 4 PDF deliverables.
 
 ### Research Agent v3.2 + meal planner v5 brief (shipped 2026-05-27)
 - [x] **Multi-wedge differentiation thesis** — `differentiation_thesis.wedges[]` with per-wedge grounding tags (`buyer-voice-backed` / `partial-buyer-voice-backed` / `incumbent-inferred` / `speculative`). Each wedge cites supporting_evidence + counter_evidence so the grounding discipline does not depend on careful prose. Wedge type taxonomy: workflow / customization / aesthetic / audience / pricing / other. See `RESEARCH_AGENT.md` §4.
@@ -58,7 +59,7 @@
 
 ### Use the Listing Agent (just shipped) on real briefs
 - [x] Generate marketing assets for the bunny's listing photos — 6 fal UI photos + programmatic size guide registered in `products/hillward-nursery-bunny/listing-photos/`. **Image manifest 5/5 ready** (hero, lifestyle, whats_included, size_grid, lifestyle_detail).
-- [ ] Generate marketing assets for the planner's 5 missing image slots (all of them — only the source PDF is registered today).
+- [x] Generate marketing assets for the meal planner listing photos — 7 total (4 fal UI + 3 programmatic). Listing Agent image manifest covers 4/7 (see `listing-package-v1.md` operator notes).
 - [ ] **Description reconciliation (bunny):** analysis complete — brief v2 description wins on SEO (94% vs 73%) and structure; apply manually with deliverables corrected to **5 JPGs only** (8×10–24×36). See commit report / chat for per-section verdict.
 - [ ] Decide Phase 2 OAuth + auto-publish gate (per principle #7: N≥5 clean previews approved without edits before `--publish` becomes default per taxonomy).
 

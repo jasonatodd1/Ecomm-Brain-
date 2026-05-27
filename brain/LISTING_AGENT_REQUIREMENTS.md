@@ -31,6 +31,9 @@
 > 1. Style-descriptor ordering — agent picks first-match across descriptors, so for the bunny brief "vintage" wins over "cottagecore" and lands on `Home style=Victorian` rather than the closer `Country & farmhouse`. Fix: rank by lift score, or have Research Agent emit descriptors in priority order, or bias toward the brief's `differentiation_angle` keyword.
 > 2. `Art subject` discovery — agent currently skips it on the bunny because `audience_descriptors` doesn't contain "rabbit" / "bunny" / "animal". The hand-built bunny listing has `Art subject=Animal`. Fix: derive subject candidates from `product.name`, `product.design.required_elements`, and primary keyword nouns.
 > 3. `Pattern` free-text — agent surfaces as `free_text_not_mapped` instead of auto-filling. Fix: optionally emit the top 1–2 style descriptors as Pattern verbatim.
+> 4. **`wedges[]` not consumed at runtime (meal planner v5, 2026-05-27).** Listing Agent renders `brief.listing.description` verbatim via `renderBriefAsEtsyDescription()` — it does **not** read `differentiation_thesis.wedges[]`. Both workflow + customization wedges landed in the meal planner package only because v5 resynthesis aligned the prose fields (`hook`, `why_this_one`) with the structured wedges. **Coherent today on aligned prose alone; fragile if resynthesis drifts.** Small upgrade path: (a) wedge-aware description QA pass that asserts each wedge's `one_line_claim` appears in hook/why_this_one, or (b) render wedge claims into description when prose is missing them.
+> 5. **`assets.metadata.display_order` ignored (meal planner, 2026-05-27).** Image manifest matches `brief.listing.image_spec` slots to assets by **kind** (one asset per kind, first match by width). Meal planner registered 7 photos with `display_order` 1–7 but brief `image_spec` has 4 slots → manifest covers 4/7; grocery + kitchen lifestyle photos and pdf-preview orphaned. Fix: honor `display_order` when multiple assets share a kind, or expand `image_spec` to N slots with explicit role labels.
+> 6. **Price omitted when `brief.product.pricing` is null.** Meal planner v5 has no `product.pricing` object — package has no price field (by design per §5). Operator must set manually (~$3.49 per brief risk notes).
 >
 > None are blockers — all surface transparently in the agent's `gaps[]` and skipped-properties table; operator can patch each in seconds at publish time.
 
@@ -362,6 +365,8 @@ differentiation_thesis: {
 - `product.design.required_elements` / `product.format.includes` → deliver the differentiated product
 
 The Listing Agent should treat `one_line_claim` as the hook anchor and verify image slots communicate the positioning before declaring the package ready. **v3.2 readers:** when `wedges[]` is present, prefer it over `our_differentiation` prose for grounding inspection — the per-wedge `grounding` tag is the durable source of truth.
+
+**Listing Agent v1 gap (2026-05-27 meal planner validation):** v1 does not yet implement the v3.2 reader contract above — it never reads `wedges[]` and does not verify wedge claims against the rendered description. It works coherently when Research Agent resynthesis keeps prose aligned with wedges; when prose drifts, wedges can be lost silently. See implementation status limitations #4.
 
 ---
 
