@@ -52,6 +52,50 @@ export function renderBriefAsMarkdown(
     }
   }
 
+  // Differentiation thesis (v3+) — load-bearing product-gap axis
+  if (brief.differentiation_thesis) {
+    const dt = brief.differentiation_thesis;
+    lines.push('## Differentiation Thesis (product-gap axis)');
+    lines.push('');
+    lines.push(`**Positioning:** ${dt.positioning}`);
+    lines.push('');
+    lines.push(`**One-line claim:** ${dt.one_line_claim}`);
+    lines.push('');
+    lines.push(`**Our differentiation:** ${dt.our_differentiation}`);
+    lines.push('');
+
+    if (dt.competitor_offerings.length > 0) {
+      lines.push('### Competitor Offerings');
+      lines.push('');
+      dt.competitor_offerings.forEach((o, i) => {
+        const pf = o.product_features;
+        lines.push(`${i + 1}. **${o.incumbent_id}**`);
+        lines.push(`   - Sections: ${pf.sections.join('; ') || '(none)'}`);
+        lines.push(`   - Sizes: ${pf.sizes.join(', ') || 'unknown'}`);
+        lines.push(`   - Formats: ${pf.formats.join(', ') || 'unknown'}`);
+        lines.push(`   - Style: ${pf.style_angle}`);
+        lines.push(`   - Bundle: ${pf.bundle_composition}`);
+        lines.push(`   - Price: ${pf.price_point}`);
+        if (pf.distinguishing_features.length > 0) {
+          lines.push(
+            `   - Distinguishing: ${pf.distinguishing_features.join('; ')}`
+          );
+        }
+      });
+      lines.push('');
+    }
+
+    if (dt.buyer_pain_signals.length > 0) {
+      lines.push('### Buyer Pain Signals (paraphrased — no verbatim reviews)');
+      lines.push('');
+      dt.buyer_pain_signals.forEach(s => {
+        lines.push(`- **${s.theme}** (${s.frequency_indicator})`);
+        s.paraphrased_examples.forEach(ex => lines.push(`  - ${ex}`));
+      });
+      lines.push('');
+    }
+  }
+
   // Market Summary
   const m = brief.market_summary;
   lines.push('## Market Summary');

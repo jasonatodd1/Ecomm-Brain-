@@ -4,6 +4,11 @@
 
 ## Current Focus
 
+### Research Agent v3 + meal planner brief (shipped 2026-05-22)
+- [x] **Research Agent upgrade** — reviews mining (`getListingReviews`), Haiku product feature extraction, load-bearing `differentiation_thesis` (research-v3). See `RESEARCH_AGENT.md`.
+- [x] **Meal planner printable v3 brief** — `npm run seed:meal-planner` + `npm run research:meal-planner`.
+- [ ] **Asset creation decision** — proceed on meal planner v3 brief or pivot based on differentiation thesis quality.
+
 ### White-space engine (proof-of-mechanism shipped 2026-05-22)
 - [x] **White-space triangulation scoring** — `npm run score:whitespace` runs gap engine standalone on candidate-pool opportunities; persists gap fields (migration 0009). Smoke-tested on 9 seed candidates.
 - [x] **Broad Trending Now collector** — `npm run collect:trending-now` (15 consumer categories, hours=168, Haiku product+IP gate, Pass C in `score-opportunities.ts`). First broad run: 2175 deduped → 600 classified → 6 kept → 16 candidates gap-scored.

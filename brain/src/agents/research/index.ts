@@ -14,6 +14,7 @@ import {
 import { renderBriefAsMarkdown } from './render-markdown.js';
 import { computeAggregates, type MarketAggregates } from './aggregates.js';
 import { computeCompetitiveLandscape } from './competitive.js';
+import { runIncumbentIntel } from './incumbent-intel.js';
 import type {
   DecisionRecord,
   EtsySearchResult,
@@ -27,7 +28,7 @@ const KEYWORD_COST_USD = 0.05;
 // listing.description, attribute_intent, image_spec, competitive_landscape.
 // Budget bumped from $0.20 (v1) to $0.30 (v2) to reflect the larger output.
 const SYNTHESIS_COST_USD = 0.3;
-const AGENT_VERSION = 'research-v2';
+const AGENT_VERSION = 'research-v3';
 
 let anthropicClient: Anthropic | null = null;
 function getAnthropic(): Anthropic {
@@ -223,6 +224,21 @@ export async function researchDecision(
       topN: 10
     });
 
+    // Step 6.7 — Incumbent intel: review mining + product feature extraction.
+    // Product-gap axis (v3) complements SEO-gap from step 6.6.
+    currentStep = 'incumbent_intel';
+    const preferredKeyword =
+      typeof ctx['primary_keyword'] === 'string'
+        ? ctx['primary_keyword']
+        : keywords[0];
+    const incumbentIntel = await runIncumbentIntel({
+      landscape: competitive.landscape,
+      listingDetailsCache: competitive.listingDetailsCache,
+      resultsByKeyword,
+      preferredKeyword
+    });
+    totalCostUsd += incumbentIntel.stats.haiku_cost_usd;
+
     // Step 7 — Synthesize brief via Opus
     currentStep = 'synthesize_brief';
     const synthesisPrompt = buildSynthesisPrompt(
@@ -230,38 +246,72 @@ export async function researchDecision(
       nicheMemory,
       searchResults,
       aggregates,
-      competitive.landscape
-    );
-    const synthesisResp = await anthropic.messages.create({
-      model: OPUS_MODEL,
-      // Tuning Pass 2 brief is substantially larger than v1: adds structured
-      // listing.description (~700-900 output tokens), attribute_intent, image_spec
-      // (4+ entries), competitive_landscape (per-keyword incumbents), and the
-      // audience persona. Budget headroom at 12000 to be safe; observed actual
-      // ~6500-7500 output tokens per v2 brief.
-      max_tokens: 12000,
-      messages: [{ role: 'user', content: synthesisPrompt }]
-    });
-    totalCostUsd += SYNTHESIS_COST_USD;
-
-    await log({
-      agent: 'intel',
-      action: 'cost.api_call',
-      description: 'Opus brief synthesis',
-      metadata: {
-        provider: 'anthropic',
-        model: OPUS_MODEL,
-        step: 'synthesis',
-        estimated_cost_usd: SYNTHESIS_COST_USD
+      competitive.landscape,
+      {
+        offerings: incumbentIntel.offerings,
+        buyer_pain_signals: incumbentIntel.buyer_pain_signals
       }
-    });
+    );
 
-    const synthesisText = stripJsonFences(getTextFromResponse(synthesisResp));
-    const briefRaw = JSON.parse(synthesisText) as unknown;
+    let briefRaw: unknown;
+    let synthesisAttempts = 0;
+    const maxSynthesisAttempts = 2;
+    while (synthesisAttempts < maxSynthesisAttempts) {
+      synthesisAttempts++;
+      const synthesisResp = await anthropic.messages.create({
+        model: OPUS_MODEL,
+        // v3 adds differentiation_thesis + load-bearing alignment — budget headroom
+        // at 16384; retry once on JSON parse failure (truncation or stray quotes).
+        max_tokens: 16384,
+        messages: [{ role: 'user', content: synthesisPrompt }]
+      });
+      totalCostUsd += SYNTHESIS_COST_USD;
+
+      await log({
+        agent: 'intel',
+        action: 'cost.api_call',
+        description: 'Opus brief synthesis',
+        metadata: {
+          provider: 'anthropic',
+          model: OPUS_MODEL,
+          step: 'synthesis',
+          attempt: synthesisAttempts,
+          estimated_cost_usd: SYNTHESIS_COST_USD
+        }
+      });
+
+      const synthesisText = stripJsonFences(getTextFromResponse(synthesisResp));
+      try {
+        briefRaw = JSON.parse(synthesisText) as unknown;
+        break;
+      } catch (parseErr) {
+        const msg =
+          parseErr instanceof Error ? parseErr.message : String(parseErr);
+        if (synthesisAttempts >= maxSynthesisAttempts) {
+          throw new Error(
+            `Synthesis JSON parse failed after ${maxSynthesisAttempts} attempts: ${msg}`
+          );
+        }
+        await log({
+          agent: 'intel',
+          action: 'synthesis.parse_retry',
+          description: `Synthesis JSON parse failed (attempt ${synthesisAttempts}), retrying`,
+          severity: 'warning',
+          metadata: { decision_id: decisionId, error: msg }
+        });
+      }
+    }
+
+    if (!briefRaw) {
+      throw new Error('Synthesis produced no parseable JSON');
+    }
     const brief = validateBrief(briefRaw);
 
     // Step 7.5 — Drift detection: trust computed aggregates over LLM output
     await reconcileNumericDrift(brief, aggregates, decisionId);
+
+    // Step 7.6 — Thesis alignment check (warn-only; does not block save)
+    await warnThesisMisalignment(brief, decisionId);
 
     // Step 9 (numbering follows spec; markdown rendered after we know briefId)
     // Save to product_briefs.
@@ -275,7 +325,13 @@ export async function researchDecision(
     const sanitizedRawResearch = sanitizeJsonbDeep({
       keywords,
       search_results: searchResults,
-      decision_snapshot: decision
+      decision_snapshot: decision,
+      incumbent_intel: {
+        offerings: incumbentIntel.offerings,
+        buyer_pain_signals: incumbentIntel.buyer_pain_signals,
+        stats: incumbentIntel.stats
+      },
+      competitive_stats: competitive.stats
     }) as Record<string, unknown>;
 
     // Diagnostic dump (kept on disk under dist/ for any save_brief failure).
@@ -433,7 +489,8 @@ export async function researchDecision(
             median_percent: Math.round(l.median_percent * 100),
             scored_count: l.scored_count
           })),
-          competitive_stats: competitive.stats
+          competitive_stats: competitive.stats,
+          incumbent_intel_stats: incumbentIntel.stats
         }
       })
       .eq('id', runId);
@@ -601,5 +658,73 @@ function validateBrief(raw: unknown): ProductBrief {
     throw new Error('Invalid confidence value');
   }
 
+  if (AGENT_VERSION === 'research-v3') {
+    const thesis = r['differentiation_thesis'];
+    if (!thesis || typeof thesis !== 'object') {
+      throw new Error('Synthesis output missing required field: differentiation_thesis');
+    }
+    const t = thesis as Record<string, unknown>;
+    for (const key of [
+      'competitor_offerings',
+      'buyer_pain_signals',
+      'our_differentiation',
+      'positioning',
+      'one_line_claim'
+    ]) {
+      if (!(key in t)) {
+        throw new Error(`differentiation_thesis missing required field: ${key}`);
+      }
+    }
+  }
+
   return r as unknown as ProductBrief;
+}
+
+function tokenizeForOverlap(text: string): Set<string> {
+  return new Set(
+    text
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter(w => w.length > 3)
+  );
+}
+
+function overlapRatio(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0;
+  let shared = 0;
+  for (const w of a) {
+    if (b.has(w)) shared++;
+  }
+  return shared / Math.min(a.size, b.size);
+}
+
+async function warnThesisMisalignment(
+  brief: ProductBrief,
+  decisionId: string
+): Promise<void> {
+  const thesis = brief.differentiation_thesis;
+  const why = brief.listing.description?.why_this_one ?? '';
+  if (!thesis || !why) return;
+
+  const thesisTokens = tokenizeForOverlap(
+    `${thesis.our_differentiation} ${thesis.one_line_claim} ${thesis.positioning}`
+  );
+  const whyTokens = tokenizeForOverlap(why);
+  const overlap = overlapRatio(thesisTokens, whyTokens);
+
+  if (overlap < 0.15) {
+    await log({
+      agent: 'intel',
+      action: 'thesis.misalignment',
+      description:
+        'listing.description.why_this_one may not reflect differentiation_thesis (low token overlap)',
+      severity: 'warning',
+      metadata: {
+        decision_id: decisionId,
+        overlap_ratio: overlap,
+        one_line_claim: thesis.one_line_claim.slice(0, 200)
+      }
+    });
+  }
 }

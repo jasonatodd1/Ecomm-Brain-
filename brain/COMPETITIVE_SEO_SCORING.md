@@ -14,7 +14,7 @@ The strategic edge this doc formalizes: **demand × (1 / supply quality)** is a 
 
 Competitive SEO Scoring is the system that:
 1. Measures any Etsy listing against a deterministic scoring rubric (§3).
-2. Lets the **Research Agent** detect weak-incumbent keywords during market analysis and surface them as differentiated opportunities (§4).
+2. Lets the **Research Agent** detect weak-incumbent keywords during market analysis and surface them as differentiated opportunities (§4). Product-gap analysis (`differentiation_thesis`, reviews mining, incumbent feature extraction) runs in parallel — see `RESEARCH_AGENT.md`.
 3. Lets the **Listing Agent** quality-gate its own drafts against the same rubric before publishing (§5).
 
 One scoring engine, two consumers — Research as the gap-detector, Listing as the pre-publish gate. The same rubric scoring incumbents in §4 is the rubric our own drafts have to beat in §5. That symmetry is the point.

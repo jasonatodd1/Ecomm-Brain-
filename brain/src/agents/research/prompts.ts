@@ -1,7 +1,9 @@
 import type {
   DecisionRecord,
   EtsySearchResult,
-  NicheMemoryRow
+  NicheMemoryRow,
+  BuyerPainSignal,
+  IncumbentOffering
 } from './types.js';
 import type { MarketAggregates } from './aggregates.js';
 import type { CompetitiveLandscapeEntry } from './competitive.js';
@@ -167,12 +169,68 @@ function formatCompetitiveLandscape(
   return lines.join('\n');
 }
 
+function formatIncumbentIntel(
+  offerings: IncumbentOffering[],
+  buyerPainSignals: BuyerPainSignal[]
+): string {
+  if (offerings.length === 0) {
+    return '(No incumbent product intelligence — treat product-gap axis as data-unavailable.)';
+  }
+
+  const lines: string[] = [
+    'Pre-computed from Etsy listing details + review mining (Haiku).',
+    'COPYRIGHT: buyer_pain_signals below are already paraphrased — copy them VERBATIM into differentiation_thesis.buyer_pain_signals. Do NOT add verbatim Etsy review quotes anywhere in the brief.',
+    ''
+  ];
+
+  lines.push('== COMPETITOR PRODUCT FEATURES (top 3 incumbents) ==');
+  offerings.forEach((o, i) => {
+    const pf = o.product_features;
+    lines.push(
+      `[${i + 1}] incumbent_id=${o.incumbent_id} — ${o.title.slice(0, 100)}`
+    );
+    lines.push(`    sections: ${pf.sections.join('; ') || '(none stated)'}`);
+    lines.push(`    sizes: ${pf.sizes.join(', ') || 'unknown'}`);
+    lines.push(`    formats: ${pf.formats.join(', ') || 'unknown'}`);
+    lines.push(`    style: ${pf.style_angle}`);
+    lines.push(`    bundle: ${pf.bundle_composition}`);
+    lines.push(`    price: ${pf.price_point}`);
+    lines.push(
+      `    distinguishing: ${pf.distinguishing_features.join('; ') || '(none)'}`
+    );
+    if (o.reviews_mined) {
+      lines.push(
+        `    reviews mined: ${o.reviews_mined.total_fetched} fetched, ${o.reviews_mined.signal_count} buyer-voice signals${o.reviews_mined.note ? ` (${o.reviews_mined.note})` : ''}`
+      );
+    }
+    lines.push('');
+  });
+
+  lines.push('== BUYER PAIN SIGNALS (paraphrased themes — NEVER add verbatim review quotes) ==');
+  if (buyerPainSignals.length === 0) {
+    lines.push(
+      '(No recurring pain themes extracted — either thin reviews or mostly positive feedback. State this honestly in our_differentiation if you cannot ground a product-level gap in review evidence.)'
+    );
+  } else {
+    buyerPainSignals.forEach((s, i) => {
+      lines.push(`[${i + 1}] theme="${s.theme}" — ${s.frequency_indicator}`);
+      s.paraphrased_examples.forEach(ex => lines.push(`    - ${ex}`));
+    });
+  }
+
+  return lines.join('\n');
+}
+
 export function buildSynthesisPrompt(
   decision: DecisionRecord,
   nicheMemory: NicheMemoryRow[],
   searchResults: EtsySearchResult[],
   aggregates: MarketAggregates,
-  competitiveLandscape: CompetitiveLandscapeEntry[] = []
+  competitiveLandscape: CompetitiveLandscapeEntry[] = [],
+  incumbentIntel: {
+    offerings: IncumbentOffering[];
+    buyer_pain_signals: BuyerPainSignal[];
+  } = { offerings: [], buyer_pain_signals: [] }
 ): string {
   const ctx = decision.context;
   const source = typeof ctx['source'] === 'string' ? ctx['source'] : 'unknown';
@@ -212,6 +270,26 @@ This is the brain's strategic edge: demand × (1 / supply quality), not demand a
 - If classification is "red_ocean", lower your recommended confidence even when demand signals are strong — a 90% incumbent field is a meaningful headwind for HillwardStudio.
 - The listing.differentiation_angle should be sharpened by the common weak_areas: if incumbents are missing FAQs, you have an FAQ angle; if they're under-titled, lean into a full 140-char title; if no shop sections, make sure to set one.
 - Output the per-keyword classifications + top_incumbents VERBATIM as listing.competitive_landscape — do not invent or alter scores; they are the engine's deterministic output.
+
+== PRODUCT-GAP INTELLIGENCE (Tuning Pass 3 — load-bearing differentiation thesis) ==
+${formatIncumbentIntel(incumbentIntel.offerings, incumbentIntel.buyer_pain_signals)}
+
+This is the SECOND strategic axis alongside SEO-gap: what incumbents actually SHIP vs what buyers WISH they shipped. The differentiation_thesis you output becomes a DESIGN CONSTRAINT on the asset — not just listing copy.
+
+Rules for differentiation_thesis:
+- competitor_offerings: copy incumbent_id + product_features from the COMPETITOR PRODUCT FEATURES section above (summarize the typical pattern in your reasoning, but preserve the structured objects).
+- buyer_pain_signals: copy the paraphrased themes above VERBATIM. NEVER add verbatim Etsy review text or direct quotes.
+- our_differentiation: MUST cite a SPECIFIC pain signal or incumbent product gap by name. Forbidden: generic claims ("more beautiful", "cleaner design", "better quality"). If review data is thin and you cannot ground a concrete product-level difference, say so honestly (e.g., "Insufficient review signal to support a product-level claim beyond SEO execution — differentiation is supply-side only").
+- positioning: the buyer-facing angle (e.g., "ADHD-friendly with visual meal-type cues", "family-of-5 portion planning", "premium minimalist for design-conscious meal preppers").
+- one_line_claim: single sentence suitable for the listing hook or title — must reflect our_differentiation specifically.
+
+LOAD-BEARING ALIGNMENT (mandatory — a brief that ignores its own thesis is invalid):
+- listing.differentiation_angle MUST align with differentiation_thesis.one_line_claim.
+- listing.description.hook and listing.description.why_this_one MUST articulate the differentiation_thesis specifically — if why_this_one could apply to any competitor, rewrite it.
+- listing.image_spec: every slot's purpose/style_notes MUST demonstrate the positioning (e.g., ADHD-friendly → show color-coded meal categories in hero; family-of-5 → show portion columns in whats_included graphic).
+- listing.attribute_intent descriptors MUST reinforce positioning where Etsy taxonomy allows.
+- product.design.required_elements MUST include the concrete product features that deliver our_differentiation (not generic "nice layout").
+- product.format.includes MUST reflect the bundle composition implied by our_differentiation.
 
 == EVALUATION RULES ==
 Be skeptical. Your job is to make a real recommendation, not to please anyone.
@@ -322,7 +400,30 @@ Return EXACTLY this structure as raw JSON. No markdown fences. No prose. No prea
 {
   "recommendation": "proceed" | "pivot" | "pass",
   "confidence": <number 0.0-1.0>,
-  "reasoning": "<2-4 sentences. Cite specific data points from above, including AT LEAST ONE specific competitive_landscape figure (e.g., 'top 3 results for primary_keyword average XX% SEO score, weak in description_length and shop_section_assigned — gap exploitable via full-length structured description and an explicit shop section').>",
+  "reasoning": "<2-4 sentences. Cite specific data points from above, including AT LEAST ONE competitive_landscape figure AND AT LEAST ONE product-gap signal (incumbent feature pattern or buyer pain theme).>",
+  "differentiation_thesis": {
+    "competitor_offerings": [
+      { "incumbent_id": "<string>",
+        "product_features": {
+          "sections": ["..."],
+          "sizes": ["..."],
+          "formats": ["..."],
+          "style_angle": "...",
+          "bundle_composition": "...",
+          "price_point": "...",
+          "distinguishing_features": ["..."]
+        }
+      }
+    ],
+    "buyer_pain_signals": [
+      { "theme": "...",
+        "frequency_indicator": "...",
+        "paraphrased_examples": ["<NEVER verbatim review text>"] }
+    ],
+    "our_differentiation": "<specific, concrete, grounded in pain signals or incumbent gaps — honest if unsupported>",
+    "positioning": "<buyer-facing angle>",
+    "one_line_claim": "<single sentence for hook/title>"
+  },
   "audience": {
     "persona": "<1-2 sentences naming the buyer archetype>",
     "primary_search_intent": "<1 sentence on what they're typing into Etsy and why>",

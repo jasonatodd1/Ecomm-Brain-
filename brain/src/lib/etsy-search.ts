@@ -36,6 +36,7 @@ const SHOPS_ENDPOINT_BASE = 'https://openapi.etsy.com/v3/application/shops';
 
 const DEFAULT_LIMIT = 25;
 const MAX_DESCRIPTION_PREVIEW = 500;
+const DEFAULT_REVIEWS_PAGE_SIZE = 25;
 
 interface EtsyPrice {
   amount?: number;
@@ -541,5 +542,187 @@ export async function getListing(
     shop_section_id:
       typeof data.shop_section_id === 'number' ? data.shop_section_id : null,
     raw: sanitizeDeep(data) as Record<string, unknown>
+  };
+}
+
+// ---------------------------------------------------------------------------
+// getListingReviews — fetch buyer reviews for a public listing.
+// Auth: x-api-key only (no user OAuth). Verified May 2026 against
+// GET /v3/application/listings/{listing_id}/reviews.
+// ---------------------------------------------------------------------------
+export interface EtsyListingReview {
+  listing_id: number;
+  shop_id: number;
+  rating: number;
+  review: string;
+  language: string;
+  create_timestamp: number;
+}
+
+interface EtsyReviewsResponse {
+  count?: number;
+  results?: EtsyListingReview[];
+  error?: string;
+}
+
+export interface GetListingReviewsResult {
+  reviews: EtsyListingReview[];
+  total_available: number;
+  api_calls: number;
+  rate_limited_429: number;
+}
+
+export async function getListingReviews(
+  listingId: number,
+  options: { maxReviews?: number; pageSize?: number } = {}
+): Promise<GetListingReviewsResult> {
+  const maxReviews = Math.min(100, Math.max(1, options.maxReviews ?? 50));
+  const pageSize = Math.min(
+    100,
+    Math.max(1, options.pageSize ?? DEFAULT_REVIEWS_PAGE_SIZE)
+  );
+
+  if (!Number.isInteger(listingId) || listingId <= 0) {
+    return { reviews: [], total_available: 0, api_calls: 0, rate_limited_429: 0 };
+  }
+
+  const collected: EtsyListingReview[] = [];
+  let totalAvailable = 0;
+  let apiCalls = 0;
+  let rateLimited429 = 0;
+  let offset = 0;
+
+  while (collected.length < maxReviews) {
+    const limit = Math.min(pageSize, maxReviews - collected.length);
+    const params = new URLSearchParams({
+      limit: String(limit),
+      offset: String(offset)
+    });
+    const url = `${LISTINGS_ENDPOINT_BASE}/${listingId}/reviews?${params.toString()}`;
+
+    let res: Response;
+    try {
+      res = await fetch(url, { headers: ETSY_HEADERS });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await log({
+        agent: 'intel',
+        action: 'etsy_reviews_fetch.failed',
+        description: `Network error fetching reviews for listing ${listingId}`,
+        severity: 'warning',
+        metadata: { listing_id: listingId, error: msg }
+      });
+      break;
+    }
+
+    apiCalls++;
+
+    if (res.status === 429) {
+      rateLimited429++;
+      const retryAfter = res.headers.get('retry-after');
+      await log({
+        agent: 'intel',
+        action: 'etsy_reviews_fetch.rate_limited',
+        description: `Etsy reviews HTTP 429 for listing ${listingId} (non-blocking)`,
+        severity: 'warning',
+        metadata: {
+          listing_id: listingId,
+          retry_after_seconds: retryAfter ?? null,
+          collected_so_far: collected.length
+        }
+      });
+      break;
+    }
+
+    if (!res.ok) {
+      const bodyText = await res.text().catch(() => '<unreadable>');
+      await log({
+        agent: 'intel',
+        action: 'etsy_reviews_fetch.failed',
+        description: `Etsy reviews HTTP ${res.status} for listing ${listingId}`,
+        severity: 'warning',
+        metadata: {
+          listing_id: listingId,
+          status_code: res.status,
+          response_body: bodyText.slice(0, 500)
+        }
+      });
+      break;
+    }
+
+    let data: EtsyReviewsResponse;
+    try {
+      data = (await res.json()) as EtsyReviewsResponse;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await log({
+        agent: 'intel',
+        action: 'etsy_reviews_fetch.failed',
+        description: `Failed to parse Etsy reviews JSON for listing ${listingId}`,
+        severity: 'warning',
+        metadata: { listing_id: listingId, error: msg }
+      });
+      break;
+    }
+
+    if (data.error) {
+      await log({
+        agent: 'intel',
+        action: 'etsy_reviews_fetch.failed',
+        description: `Etsy API error for listing ${listingId} reviews`,
+        severity: 'warning',
+        metadata: { listing_id: listingId, etsy_error: data.error }
+      });
+      break;
+    }
+
+    totalAvailable = typeof data.count === 'number' ? data.count : totalAvailable;
+    const batch = (data.results ?? [])
+      .filter(
+        (r): r is EtsyListingReview =>
+          typeof r.listing_id === 'number' &&
+          typeof r.rating === 'number' &&
+          typeof r.review === 'string'
+      )
+      .map(r => ({
+        listing_id: r.listing_id,
+        shop_id: typeof r.shop_id === 'number' ? r.shop_id : 0,
+        rating: r.rating,
+        review: sanitizeForJsonb(r.review),
+        language: sanitizeForJsonb(
+          typeof r.language === 'string' ? r.language : 'unknown'
+        ),
+        create_timestamp:
+          typeof r.create_timestamp === 'number' ? r.create_timestamp : 0
+      }));
+
+    collected.push(...batch);
+    offset += batch.length;
+
+    if (batch.length < limit) break;
+  }
+
+  if (apiCalls > 0) {
+    await log({
+      agent: 'intel',
+      action: 'cost.api_call',
+      description: `Etsy API listing ${listingId} reviews (${collected.length} fetched)`,
+      metadata: {
+        provider: 'etsy_api',
+        engine: 'listing_reviews',
+        listing_id: listingId,
+        reviews_fetched: collected.length,
+        api_calls: apiCalls,
+        rate_limited_429: rateLimited429,
+        estimated_cost_usd: 0
+      }
+    });
+  }
+
+  return {
+    reviews: collected.slice(0, maxReviews),
+    total_available: totalAvailable,
+    api_calls: apiCalls,
+    rate_limited_429: rateLimited429
   };
 }

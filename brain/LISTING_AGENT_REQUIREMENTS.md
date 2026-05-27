@@ -20,6 +20,7 @@
 > | §5 Auto-trigger missing-asset generation | Emits generation hints + ready-to-run `npm run gen` skeleton per missing slot | ✅ built as hints (auto-trigger is Phase 2 — operator runs the command) |
 > | §6 Asset registry | `assets` table + 4 producers + `link:asset` CLI | ✅ built (separate commit, prerequisite for v1) |
 > | §7 Research Agent Tuning Pass 2 | `attribute_intent` + structured `listing.description` + `image_spec` + `shop_section_suggestion` + `competitive_landscape` | ✅ built (separate commit, prerequisite for v1) |
+> | §7.5 Research Agent Tuning Pass 3 | `differentiation_thesis` (reviews mining + product features + load-bearing alignment) | ✅ built — see `RESEARCH_AGENT.md` |
 > | §8 Multi-store architecture | `src/agents/listing/` + `adapters/etsy.ts` shape | ✅ built for Etsy; Pinterest / Shopify deferred |
 > | §9 Logging | `agent_runs` (`agent='listing'`) + per-step `activity` rows | ✅ built |
 > | Pre-publish SEO gate | `scoreEtsyListingSeo()` against incumbent benchmark from `brief.competitive_landscape`, ONE Opus pass on `weak_areas` if below | ✅ built (capped at 1 pass per spec — never recurses) |
@@ -308,6 +309,35 @@ listing: {
   shop_section_suggestion: string   // e.g. "Nursery Wall Art" or "Planner Inserts"
 }
 ```
+
+### `differentiation_thesis` — load-bearing product-gap axis (research-v3)
+
+Tuning Pass 3 adds a top-level brief field that is a **design constraint on the asset**, not just listing copy. See `RESEARCH_AGENT.md` for the full dual-axis methodology (SEO-gap + product-gap).
+
+```ts
+differentiation_thesis: {
+  competitor_offerings: Array<{ incumbent_id: string; product_features: ProductFeatures }>,
+  buyer_pain_signals: Array<{
+    theme: string,
+    frequency_indicator: string,
+    paraphrased_examples: string[]  // NEVER verbatim Etsy review text
+  }>,
+  our_differentiation: string,  // specific + grounded; honest if unsupported
+  positioning: string,
+  one_line_claim: string
+}
+```
+
+**Copyright rule:** Buyer pain signals are synthesized from Etsy reviews via Haiku paraphrase only. The brief and operator markdown must never contain direct review quotes.
+
+**Downstream contract:** When `differentiation_thesis` is present, these fields must reflect it — a generic `description.why_this_one` or `image_spec` that ignores the thesis is a bug:
+
+- `listing.description.hook` / `why_this_one` → articulate `our_differentiation`
+- `listing.image_spec[]` → visual proof of `positioning`
+- `listing.attribute_intent` → descriptors reinforce positioning
+- `product.design.required_elements` / `product.format.includes` → deliver the differentiated product
+
+The Listing Agent should treat `one_line_claim` as the hook anchor and verify image slots communicate the positioning before declaring the package ready.
 
 ---
 

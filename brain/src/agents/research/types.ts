@@ -7,6 +7,10 @@
 //   research-v2 (Tuning Pass 2) — adds `audience`, `listing.description`,
 //     `listing.attribute_intent`, `listing.image_spec`,
 //     `listing.shop_section_suggestion`, `listing.competitive_landscape`.
+//   research-v3 — adds `differentiation_thesis` (product-gap axis): incumbent
+//     product features + paraphrased buyer pain signals + load-bearing
+//     our_differentiation / positioning / one_line_claim. Downstream brief
+//     fields (description, image_spec, attribute_intent) MUST reflect the thesis.
 //     Backward-compat: `listing.description_angles` is preserved (legacy);
 //     downstream agents should prefer `listing.description` when present and
 //     fall back to `listing.description_angles` otherwise.
@@ -215,6 +219,57 @@ export type ProductBrief = {
     severity: 'low' | 'medium' | 'high';
     mitigation: string;
   }>;
+
+  /**
+   * Product-level differentiation thesis — research-v3.
+   * Load-bearing design constraint: downstream fields (description.hook,
+   * description.why_this_one, image_spec, attribute_intent, product.design)
+   * must reflect this thesis, not generic positioning.
+   * buyer_pain_signals use paraphrased examples ONLY — never verbatim review text.
+   */
+  differentiation_thesis?: DifferentiationThesis;
+};
+
+export interface ProductFeatures {
+  sections: string[];
+  sizes: string[];
+  formats: string[];
+  style_angle: string;
+  bundle_composition: string;
+  price_point: string;
+  distinguishing_features: string[];
+}
+
+export interface IncumbentOffering {
+  incumbent_id: string;
+  title: string;
+  product_features: ProductFeatures;
+  /** Operational metadata from review mining — not buyer-facing copy. */
+  reviews_mined?: {
+    total_fetched: number;
+    signal_count: number;
+    note?: string;
+  };
+}
+
+export interface BuyerPainSignal {
+  theme: string;
+  frequency_indicator: string;
+  /** Paraphrased buyer-voice examples — NEVER verbatim Etsy review text. */
+  paraphrased_examples: string[];
+}
+
+export interface DifferentiationThesis {
+  /** Typical offering pattern across top incumbents (Haiku-extracted features). */
+  competitor_offerings: Array<{
+    incumbent_id: string;
+    product_features: ProductFeatures;
+  }>;
+  buyer_pain_signals: BuyerPainSignal[];
+  /** Concrete product-level difference grounded in pain signals; honest if unsupported. */
+  our_differentiation: string;
+  positioning: string;
+  one_line_claim: string;
 };
 
 export interface DecisionRecord {
