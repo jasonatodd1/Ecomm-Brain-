@@ -305,9 +305,16 @@ This is the SECOND strategic axis alongside SEO-gap: what same-niche incumbents 
 Rules for differentiation_thesis:
 - competitor_offerings: copy incumbent_id + product_features from the COMPETITOR PRODUCT FEATURES section above (summarize the typical pattern in your reasoning, but preserve the structured objects). Do NOT alter incumbent_id strings.
 - buyer_pain_signals: copy the paraphrased themes above VERBATIM. NEVER add verbatim Etsy review text or direct quotes.
-- our_differentiation: MUST cite a SPECIFIC pain signal or incumbent product gap by name. Forbidden: generic claims ("more beautiful", "cleaner design", "better quality"). When the data is thin, BE HONEST in this field about the grounding source: lead with "(buyer-voice-backed:" when at least one cited theme has frequency ≥2 mentions, OR "(incumbent-inferred:" when relying mostly on incumbent product structure rather than reviews. If data is too thin even for incumbent inference (data_thinness LOW + pool_exhausted true), say so plainly.
-- positioning: the buyer-facing angle (e.g., "ADHD-friendly with visual meal-type cues", "family-of-5 portion planning", "premium minimalist for design-conscious meal preppers").
-- one_line_claim: single sentence suitable for the listing hook or title — must reflect our_differentiation specifically.
+- wedges[]: 1–3 entries (lead wedge first — drives the hook). EACH wedge gets its own grounding tag derived from the EVIDENCE:
+    * "buyer-voice-backed" — ≥2 pain themes directly support the wedge claim
+    * "partial-buyer-voice-backed" — 1 strong + ≥1 partial OR 2+ partial supports
+    * "incumbent-inferred" — no buyer-voice support; grounded in observed incumbent structural gaps
+    * "speculative" — neither buyer voice nor concrete incumbent gap (use sparingly; mostly avoid)
+  Wedge type taxonomy: workflow | customization | aesthetic | audience | pricing | other.
+  supporting_evidence must cite specific pain theme labels OR specific incumbent_id+gap pairs (e.g. "1386590527: separate meal grid and grocery list pages"). counter_evidence is REQUIRED when any pain theme argues against the wedge — hiding contradictions violates the discipline (e.g. for a paper-modality wedge, the "wants more tracking/analytics" theme is counter-evidence and must be listed).
+- our_differentiation: free-form unified summary across wedges (≤3 sentences). v3.2+ no longer requires a prefix tag here because per-wedge tags live in wedges[].
+- positioning: the buyer-facing angle (e.g., "ADHD-friendly with visual meal-type cues", "family-of-5 portion planning", "premium minimalist for design-conscious meal preppers"). Drawn from the LEAD wedge for thumbnail-scanning coherence.
+- one_line_claim: single sentence suitable for the listing hook or title — focus on the LEAD wedge; do not dilute by forcing every wedge into one sentence.
 
 LOAD-BEARING ALIGNMENT (mandatory — a brief that ignores its own thesis is invalid):
 - listing.differentiation_angle MUST align with differentiation_thesis.one_line_claim.
@@ -446,9 +453,16 @@ Return EXACTLY this structure as raw JSON. No markdown fences. No prose. No prea
         "frequency_indicator": "...",
         "paraphrased_examples": ["<NEVER verbatim review text>"] }
     ],
-    "our_differentiation": "<specific, concrete, grounded in pain signals or incumbent gaps — honest if unsupported>",
-    "positioning": "<buyer-facing angle>",
-    "one_line_claim": "<single sentence for hook/title>"
+    "wedges": [
+      { "type": "workflow" | "customization" | "aesthetic" | "audience" | "pricing" | "other",
+        "grounding": "buyer-voice-backed" | "partial-buyer-voice-backed" | "incumbent-inferred" | "speculative",
+        "claim": "<single concrete sentence>",
+        "supporting_evidence": ["<pain theme label OR incumbent_id+gap>"],
+        "counter_evidence": ["<REQUIRED when pain themes argue against the wedge>"] }
+    ],
+    "our_differentiation": "<unified summary across wedges; ≤3 sentences>",
+    "positioning": "<buyer-facing angle drawn from lead wedge>",
+    "one_line_claim": "<single sentence focused on lead wedge — do not dilute>"
   },
   "audience": {
     "persona": "<1-2 sentences naming the buyer archetype>",

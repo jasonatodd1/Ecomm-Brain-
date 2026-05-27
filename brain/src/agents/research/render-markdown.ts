@@ -61,8 +61,30 @@ export function renderBriefAsMarkdown(
     lines.push('');
     lines.push(`**One-line claim:** ${dt.one_line_claim}`);
     lines.push('');
-    lines.push(`**Our differentiation:** ${dt.our_differentiation}`);
+    lines.push(`**Our differentiation (unified):** ${dt.our_differentiation}`);
     lines.push('');
+
+    // Wedges (v3.2+) — per-wedge grounding tags. Lead wedge first.
+    if (dt.wedges && dt.wedges.length > 0) {
+      lines.push('### Wedges (per-wedge grounding)');
+      lines.push('');
+      dt.wedges.forEach((w, i) => {
+        const lead = i === 0 ? ' — **LEAD**' : '';
+        lines.push(
+          `${i + 1}. **[${w.type}]** \`${w.grounding}\`${lead}`
+        );
+        lines.push(`   - *Claim:* ${w.claim}`);
+        if (w.supporting_evidence.length > 0) {
+          lines.push(`   - *Supporting evidence:*`);
+          w.supporting_evidence.forEach(e => lines.push(`     - ${e}`));
+        }
+        if (w.counter_evidence && w.counter_evidence.length > 0) {
+          lines.push(`   - *Counter-evidence (honest acknowledgment):*`);
+          w.counter_evidence.forEach(e => lines.push(`     - ${e}`));
+        }
+      });
+      lines.push('');
+    }
 
     // Relevance filter (v3.1+) — separates product-gap from SEO-gap selection.
     if (dt.relevance_filter) {

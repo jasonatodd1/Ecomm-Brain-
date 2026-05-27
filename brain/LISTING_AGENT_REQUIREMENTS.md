@@ -310,9 +310,9 @@ listing: {
 }
 ```
 
-### `differentiation_thesis` — load-bearing product-gap axis (research-v3 / v3.1)
+### `differentiation_thesis` — load-bearing product-gap axis (research-v3 / v3.1 / v3.2)
 
-Tuning Pass 3 adds a top-level brief field that is a **design constraint on the asset**, not just listing copy. See `RESEARCH_AGENT.md` for the full dual-axis methodology (SEO-gap + product-gap) and the dual-incumbent-selection design (research-v3.1).
+Tuning Pass 3 adds a top-level brief field that is a **design constraint on the asset**, not just listing copy. See `RESEARCH_AGENT.md` for the full dual-axis methodology (SEO-gap + product-gap), the dual-incumbent-selection design (research-v3.1), and the multi-wedge discipline (research-v3.2).
 
 ```ts
 differentiation_thesis: {
@@ -326,7 +326,18 @@ differentiation_thesis: {
     frequency_indicator: string,
     paraphrased_examples: string[]  // NEVER verbatim Etsy review text
   }>,
-  our_differentiation: string,       // v3.1 prefix-tagged "(buyer-voice-backed:" or "(incumbent-inferred:"
+  wedges?: Array<{                   // v3.2 — per-wedge grounding, lead wedge first
+    type: 'workflow' | 'customization' | 'aesthetic' | 'audience' | 'pricing' | 'other',
+    grounding:
+      | 'buyer-voice-backed'           // ≥2 pain themes directly support
+      | 'partial-buyer-voice-backed'   // 1 strong + ≥1 partial OR 2+ partial
+      | 'incumbent-inferred'           // no buyer-voice; structural gap
+      | 'speculative',                 // hypothesis only
+    claim: string,                     // single concrete sentence
+    supporting_evidence: string[],     // pain theme labels OR incumbent_id+gap pairs
+    counter_evidence?: string[]        // REQUIRED when pain themes argue against
+  }>,
+  our_differentiation: string,       // v3.2 unified summary (no inline tag); v3.1 prefix-tagged "(buyer-voice-backed:" or "(incumbent-inferred:"
   positioning: string,
   one_line_claim: string,
   relevance_filter?: {               // v3.1 — operator-facing filter audit
@@ -345,12 +356,12 @@ differentiation_thesis: {
 
 **Downstream contract:** When `differentiation_thesis` is present, these fields must reflect it — a generic `description.why_this_one` or `image_spec` that ignores the thesis is a bug:
 
-- `listing.description.hook` / `why_this_one` → articulate `our_differentiation`
+- `listing.description.hook` / `why_this_one` → articulate `our_differentiation` (v3.2: `hook` reflects the LEAD wedge; `why_this_one` names foils for ALL wedges)
 - `listing.image_spec[]` → visual proof of `positioning`
 - `listing.attribute_intent` → descriptors reinforce positioning
 - `product.design.required_elements` / `product.format.includes` → deliver the differentiated product
 
-The Listing Agent should treat `one_line_claim` as the hook anchor and verify image slots communicate the positioning before declaring the package ready.
+The Listing Agent should treat `one_line_claim` as the hook anchor and verify image slots communicate the positioning before declaring the package ready. **v3.2 readers:** when `wedges[]` is present, prefer it over `our_differentiation` prose for grounding inspection — the per-wedge `grounding` tag is the durable source of truth.
 
 ---
 

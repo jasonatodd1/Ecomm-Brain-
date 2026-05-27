@@ -2,7 +2,7 @@
 
 > Durable spec for the Research Agent's market analysis. The agent produces structured `ProductBrief` rows consumed literally by Design, Listing, and Asset pipelines.
 >
-> **Schema version:** `research-v3` (May 2026). Prior versions: `research-v1` (base brief), `research-v2` (Tuning Pass 2 — structured listing, SEO landscape).
+> **Schema version:** `research-v3.2` (May 2026). Prior: `research-v3.1` (relevance-filtered product-gap), `research-v3` (load-bearing differentiation thesis), `research-v2` (Tuning Pass 2 — structured listing, SEO landscape), `research-v1` (base brief).
 
 ---
 
@@ -116,7 +116,7 @@ interface ProductFeatures {
 
 ## 5. differentiation_thesis schema (PART C)
 
-Top-level brief field (research-v3 / v3.1):
+Top-level brief field. Multi-wedge structure added in `research-v3.2`:
 
 ```ts
 interface DifferentiationThesis {
@@ -130,10 +130,24 @@ interface DifferentiationThesis {
     frequency_indicator: string;
     paraphrased_examples: string[];  // NEVER verbatim Etsy review text
   }>;
-  our_differentiation: string;  // v3.1 prefix-tagged "(buyer-voice-backed:" or "(incumbent-inferred:"
+  wedges?: DifferentiationWedge[];   // v3.2 — per-wedge grounding, lead wedge first
+  our_differentiation: string;       // v3.2: unified summary (no inline tag prefix); v3.1: prefix-tagged "(buyer-voice-backed:" or "(incumbent-inferred:"
   positioning: string;
   one_line_claim: string;
   relevance_filter?: RelevanceFilterReport;  // v3.1 — operator-facing filter audit
+}
+
+// v3.2 wedge
+interface DifferentiationWedge {
+  type: 'workflow' | 'customization' | 'aesthetic' | 'audience' | 'pricing' | 'other';
+  grounding:
+    | 'buyer-voice-backed'           // ≥2 pain themes directly support the claim
+    | 'partial-buyer-voice-backed'   // 1 strong + ≥1 partial OR 2+ partial supports
+    | 'incumbent-inferred'           // no buyer-voice support; grounded in observed incumbent gaps
+    | 'speculative';                 // hypothesis only — neither buyer voice nor concrete gap
+  claim: string;                     // single concrete sentence
+  supporting_evidence: string[];     // pain theme labels OR incumbent_id+gap pairs
+  counter_evidence?: string[];       // REQUIRED when any pain theme argues against the wedge
 }
 
 interface RelevanceFilterReport {
@@ -146,6 +160,19 @@ interface RelevanceFilterReport {
   classifications: Array<{ listing_id, title, num_favorers, relevant, reason }>;
 }
 ```
+
+### 5.1 Multi-wedge discipline (v3.2)
+
+The prior single-tag inline approach (v3.1) put the grounding burden on prose. v3.2 makes it structural so future readers see grounding at a glance:
+
+1. **Lead wedge first.** Order determines the hook. For utility niches like `meal planner printable` where buyers have already self-selected for the workflow (paper) before searching, the workflow wedge should usually lead — the secondary wedge becomes validation rather than persuasion.
+2. **One grounding tag per wedge.** A wedge that's contradicted by *some* pain themes cannot claim `buyer-voice-backed` — it earns `partial-buyer-voice-backed` and MUST list the contradicting themes in `counter_evidence`. Hiding contradictions violates the discipline.
+3. **`our_differentiation` becomes unified summary.** v3.2+ does not require an inline tag prefix because per-wedge grounding lives in `wedges[]`. Keep it ≤3 sentences.
+4. **`one_line_claim` focuses on the lead wedge.** Forcing every wedge into one sentence dilutes the hook for thumbnail scanning. Secondary wedges belong in `description.why_this_one` as supporting paragraphs.
+
+### 5.2 Methodology note — low-review-voice categories
+
+Utility products (planners, trackers, simple decor) often produce reviews that are mostly 5-star "thanks, printed great" rather than wishlist/complaint signal. Even after the v3.1 relevance filter, such niches may never reach `high` data thinness. **In those cases, incumbent-inferred wedges remain acceptable** — provided they are honestly tagged as such per wedge. Suppressing a structurally-supported wedge because it lacks buyer voice would discard real signal; conflating it with `buyer-voice-backed` would launder it. The per-wedge grounding tags solve this honestly without forcing all-or-nothing brief quality.
 
 ---
 
@@ -179,6 +206,17 @@ Post-synthesis: `warnThesisMisalignment()` logs when `why_this_one` token overla
 | Pain signal paraphrase | Haiku | ~$0.006 |
 | Brief synthesis | Opus | ~$0.30 |
 | **Total** | | **~$0.38** |
+
+### 7.1 v5 resynthesis (v3.2 multi-wedge — partial update)
+
+Re-synthesizing an existing brief into the multi-wedge structure does not re-call Etsy or Haiku — it's a single Opus pass on cached inputs that emits only the changed fields (thesis, listing copy, hero style notes), which are then patched onto the source brief programmatically.
+
+| Step | Model / API | Cost |
+|---|---|---|
+| Partial-update synthesis | Opus | ~$0.18 |
+| **Total** | | **~$0.18** |
+
+CLI: `npm run resynth:meal-planner-v5`. Source brief id and the v5 wedge spec are pinned in `src/jobs/resynthesize-meal-planner-v5.ts` — future briefs use the standard `npm run research` pipeline which now emits `wedges[]` natively per the updated synthesis prompt.
 
 ---
 

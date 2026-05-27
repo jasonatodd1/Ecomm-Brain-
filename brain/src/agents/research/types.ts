@@ -11,6 +11,14 @@
 //     product features + paraphrased buyer pain signals + load-bearing
 //     our_differentiation / positioning / one_line_claim. Downstream brief
 //     fields (description, image_spec, attribute_intent) MUST reflect the thesis.
+//   research-v3.1 — relevance-filtered product-gap selection (Haiku classifier
+//     on cross-keyword candidate pool); adds `relevance_filter` to thesis.
+//     SEO-gap output unchanged from v3.
+//   research-v3.2 — multi-wedge differentiation: `differentiation_thesis.wedges[]`
+//     with per-wedge grounding tags (buyer-voice-backed / partial-buyer-voice-backed
+//     / incumbent-inferred / speculative). Discipline: every wedge cites its
+//     supporting_evidence + (when present) counter_evidence. our_differentiation
+//     becomes the unified summary across wedges.
 //     Backward-compat: `listing.description_angles` is preserved (legacy);
 //     downstream agents should prefer `listing.description` when present and
 //     fall back to `listing.description_angles` otherwise.
@@ -264,6 +272,53 @@ export interface BuyerPainSignal {
   paraphrased_examples: string[];
 }
 
+/**
+ * Wedge type taxonomy (research-v3.2). Extend cautiously — every new value
+ * is a contract change. Current values:
+ *   - workflow:      structural / use-pattern differentiation (e.g. single-page tear-off)
+ *   - customization: modality or flexibility wedge (e.g. pen-and-paper vs locked spreadsheet)
+ *   - aesthetic:     visual / brand-design wedge
+ *   - audience:      sub-audience specialization (e.g. ADHD-friendly, family-of-5)
+ *   - pricing:       price-strategy wedge (rare; usually a tactic, not a thesis)
+ *   - other:         escape hatch — should round-trip into a new typed value before reuse
+ */
+export type WedgeType =
+  | 'workflow'
+  | 'customization'
+  | 'aesthetic'
+  | 'audience'
+  | 'pricing'
+  | 'other';
+
+/**
+ * Per-wedge grounding tag (research-v3.2). Discipline rule: the strongest
+ * grounding a wedge can claim is the strongest tier the evidence supports.
+ *   - buyer-voice-backed:         ≥2 pain themes directly support the wedge claim
+ *   - partial-buyer-voice-backed: 1 strong + ≥1 partial OR 2+ partial supports
+ *   - incumbent-inferred:         no buyer-voice support; grounded in observed incumbent gaps
+ *   - speculative:                neither buyer voice nor concrete incumbent gap — hypothesis only
+ */
+export type WedgeGrounding =
+  | 'buyer-voice-backed'
+  | 'partial-buyer-voice-backed'
+  | 'incumbent-inferred'
+  | 'speculative';
+
+export interface DifferentiationWedge {
+  type: WedgeType;
+  grounding: WedgeGrounding;
+  /** Concrete claim, single sentence. */
+  claim: string;
+  /** Pain theme labels and/or incumbent gap labels that back this wedge. */
+  supporting_evidence: string[];
+  /**
+   * Pain themes or incumbent observations that ARGUE AGAINST this wedge —
+   * required when present in the data. Hiding counter-evidence violates the
+   * grounding discipline. Absent only when no counter-evidence exists.
+   */
+  counter_evidence?: string[];
+}
+
 export interface RelevanceClassification {
   listing_id: string;
   title: string;
@@ -292,7 +347,19 @@ export interface DifferentiationThesis {
     relevance_reason?: string;
   }>;
   buyer_pain_signals: BuyerPainSignal[];
-  /** Concrete product-level difference grounded in pain signals; honest if unsupported. */
+  /**
+   * Multi-wedge thesis (research-v3.2+). Each wedge carries its own grounding
+   * tag so future readers see at a glance what's buyer-voice-backed vs
+   * incumbent-inferred — discipline does not depend on careful prose. Order
+   * matters: lead wedge first (the one that drives the hook).
+   * Absent on v3 / v3.1 briefs.
+   */
+  wedges?: DifferentiationWedge[];
+  /**
+   * Unified summary across all wedges. v3 / v3.1: prefix-tagged inline
+   * (e.g. "(incumbent-inferred: …)"). v3.2+: free-form summary; per-wedge
+   * grounding lives in `wedges[]` instead.
+   */
   our_differentiation: string;
   positioning: string;
   one_line_claim: string;

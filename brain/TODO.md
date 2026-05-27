@@ -4,10 +4,14 @@
 
 ## Current Focus
 
+### Research Agent v3.2 + meal planner v5 brief (shipped 2026-05-27)
+- [x] **Multi-wedge differentiation thesis** — `differentiation_thesis.wedges[]` with per-wedge grounding tags (`buyer-voice-backed` / `partial-buyer-voice-backed` / `incumbent-inferred` / `speculative`). Each wedge cites supporting_evidence + counter_evidence so the grounding discipline does not depend on careful prose. Wedge type taxonomy: workflow / customization / aesthetic / audience / pricing / other. See `RESEARCH_AGENT.md` §4.
+- [x] **Meal planner v5 brief** — `npm run resynth:meal-planner-v5` re-synthesizes v4's data into a multi-wedge thesis (no new data collection). Lead wedge = workflow `incumbent-inferred`; second wedge = customization `partial-buyer-voice-backed` (backed by password-protection + inflexible-entry pain; honest counter-evidence: analytics buyers are not the audience). Asset spec unchanged.
+- [ ] **Asset creation decision** — proceed on meal planner v5 brief (multi-wedge thesis is sharper but same asset).
+
 ### Research Agent v3.1 + meal planner v4 brief (shipped 2026-05-27)
 - [x] **Incumbent relevance filter** — product-gap analysis now classifies candidate pool via Haiku and operates on relevance-confirmed same-niche incumbents only. SEO-gap analysis unchanged (top-by-favorers). Pool: 20→40 with expansion; target 3 relevant; honest data_thinness reporting (high/medium/low). See `RESEARCH_AGENT.md` §3.
 - [x] **Meal planner v4 brief** — re-run on relevance-filtered set surfaced MyLifePlans/PlansByChloe/MarrMarStudio (real meal planners) with 12 buyer-voice signal reviews vs v3's 3. Single-page+aisle-grouped thesis confirmed and refined.
-- [ ] **Asset creation decision** — proceed on meal planner v4 brief or pivot based on differentiation thesis quality.
 
 ### Research Agent v3 + meal planner brief (shipped 2026-05-22)
 - [x] **Research Agent upgrade** — reviews mining (`getListingReviews`), Haiku product feature extraction, load-bearing `differentiation_thesis` (research-v3). See `RESEARCH_AGENT.md`.

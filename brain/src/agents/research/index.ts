@@ -28,7 +28,7 @@ const KEYWORD_COST_USD = 0.05;
 // listing.description, attribute_intent, image_spec, competitive_landscape.
 // Budget bumped from $0.20 (v1) to $0.30 (v2) to reflect the larger output.
 const SYNTHESIS_COST_USD = 0.3;
-const AGENT_VERSION = 'research-v3';
+const AGENT_VERSION = 'research-v3.2';
 
 let anthropicClient: Anthropic | null = null;
 function getAnthropic(): Anthropic {
@@ -685,7 +685,8 @@ function validateBrief(raw: unknown): ProductBrief {
     throw new Error('Invalid confidence value');
   }
 
-  if (AGENT_VERSION === 'research-v3') {
+  // research-v3 / v3.1 / v3.2 all require differentiation_thesis
+  {
     const thesis = r['differentiation_thesis'];
     if (!thesis || typeof thesis !== 'object') {
       throw new Error('Synthesis output missing required field: differentiation_thesis');
@@ -701,6 +702,49 @@ function validateBrief(raw: unknown): ProductBrief {
       if (!(key in t)) {
         throw new Error(`differentiation_thesis missing required field: ${key}`);
       }
+    }
+    // v3.2+ requires wedges[] (1-3 entries, each with type+grounding+claim)
+    if (AGENT_VERSION === 'research-v3.2') {
+      const wedges = t['wedges'];
+      if (!Array.isArray(wedges) || wedges.length < 1 || wedges.length > 3) {
+        throw new Error(
+          'differentiation_thesis.wedges must be 1-3 entries (research-v3.2)'
+        );
+      }
+      const allowedTypes = new Set([
+        'workflow',
+        'customization',
+        'aesthetic',
+        'audience',
+        'pricing',
+        'other'
+      ]);
+      const allowedGroundings = new Set([
+        'buyer-voice-backed',
+        'partial-buyer-voice-backed',
+        'incumbent-inferred',
+        'speculative'
+      ]);
+      wedges.forEach((w, i) => {
+        if (!w || typeof w !== 'object') {
+          throw new Error(`wedges[${i}] must be an object`);
+        }
+        const wo = w as Record<string, unknown>;
+        const wType = wo['type'];
+        const wGrd = wo['grounding'];
+        if (typeof wType !== 'string' || !allowedTypes.has(wType)) {
+          throw new Error(`wedges[${i}].type invalid: ${String(wType)}`);
+        }
+        if (typeof wGrd !== 'string' || !allowedGroundings.has(wGrd)) {
+          throw new Error(`wedges[${i}].grounding invalid: ${String(wGrd)}`);
+        }
+        if (typeof wo['claim'] !== 'string' || !wo['claim']) {
+          throw new Error(`wedges[${i}].claim must be a non-empty string`);
+        }
+        if (!Array.isArray(wo['supporting_evidence'])) {
+          throw new Error(`wedges[${i}].supporting_evidence must be an array`);
+        }
+      });
     }
   }
 
