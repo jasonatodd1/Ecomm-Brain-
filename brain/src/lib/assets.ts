@@ -23,7 +23,8 @@ export type AssetKind =
   | 'master'
   | 'transparent'
   | 'ratio_guide'
-  | 'crop_marks_pdf';
+  | 'crop_marks_pdf'
+  | 'printable_pdf';
 
 export type AssetSource =
   | 'fal_generated'
@@ -48,6 +49,7 @@ export const ASSET_KINDS: readonly AssetKind[] = [
   'transparent',
   'ratio_guide',
   'crop_marks_pdf',
+  'printable_pdf',
 ] as const;
 
 export const ASSET_SOURCES: readonly AssetSource[] = [

@@ -101,8 +101,21 @@ The vision critic passed a wireframe stick-figure at **8/10** even after the rub
 | Layout/composition tuning on a stable template | Curated reference assets (silhouettes, icons) |
 | After locked-asset injection is implemented | Size guides with honest scale (until asset injection ships) |
 | Operator can eyeball final PNG | Production listing photos before flaws 1+2 are fixed |
+| | **Structured-document deliverables (printable planners, trackers, charts)** |
 
 **Bunny size guide (2026-05-22):** hand-built with couch asset after loop false-passed on wireframe person. Final PNG committed; loop used only for capability test.
+
+**Meal planner v1 (2026-05-27):** hand-built HTML/CSS/Puppeteer template (`products/hillward-meal-planner/templates/index.html`) with `src/render/meal-planner.ts` renderer producing 4 PDFs (`{sun,mon}-{letter,a4}`). Same reasoning as the bunny — the `refine:graphic` loop's known flaws would corrupt the locked asset spec (it rewrites the entire HTML each REVISE pass, would drop the aisle headers or break the grid). For structured-document deliverables specifically, **manual operator visual review IS the iteration loop** until asset injection (flaw 1) AND a non-text-based critic (flaw 2) both ship. This is not a regression from autonomy — it's the correct choice given the failure modes.
+
+#### Structured-document asset pattern (planners, trackers, charts)
+
+Established by `hillward-a5-monthly` (May 22) and `hillward-meal-planner` (May 27). When a brief's `product.format.includes` is one or more print-ready PDFs (vs raster art with photo mockups), follow this pattern:
+
+1. **Single parameterized HTML/CSS source** in `products/<slug>/templates/index.html`. CSS custom properties for color/spacing/typography, semantic class names, no magic numbers in deep selectors. Variants live on `<body>` data-attributes (e.g. `data-start="sun"`, `data-size="letter"`).
+2. **Puppeteer renderer in `src/render/<slug>.ts`** opens the HTML once, iterates variant combinations, flips the data-attributes via `page.evaluate` before each `page.pdf` call, and writes outputs to `products/<slug>/deliverables/` (gitignored).
+3. **`npm run build:<slug>`** script in `package.json` for operator-driven rebuilds.
+4. **`printable_pdf` asset kind** (migration 0011) for each deliverable PDF — `npm run link:asset` per SKU with `--product-brief-id=<uuid>` and `--source=render_planner`.
+5. **Manual visual iteration loop** — operator reviews each PDF, requests specific changes, dev edits HTML/CSS, re-runs `build:<slug>`. No autonomous critic until flaws 1+2 are fixed.
 
 ---
 

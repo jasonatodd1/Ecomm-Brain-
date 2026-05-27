@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>HillwardStudio Meal Planner</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    /* ============================================================
+       HillwardStudio Meal Planner — v1
+       One-page weekly meal grid + aisle-grouped grocery list.
+
+       Asset spec locked by v5 brief cb213bf4.
+       Required elements (do not remove):
+         - 7-day meal grid (B/L/D)
+         - Aisle-grouped grocery list: Produce / Proteins / Dairy /
+           Pantry / Freezer / Other
+         - Meal grid + grocery side-by-side on a single page
+         - Week-start label visible
+         - Notes strip
+         - Print-friendly ink (hairline rules, no solid fills)
+
+       Variants (set on <body> by Puppeteer pre-render):
+         data-start="sun" | "mon"
+         data-size="letter" | "a4"
+       ============================================================ */
+
+    :root {
+      /* Palette — HillwardStudio warm-neutral system.
+         Honey is the single accent (used for aisle rules + start chip).
+         Everything else is grayscale-ish so ink coverage stays low. */
+      --off-white:  #F7F5F2;
+      --cream:      #EDE8E1;
+      --sand:       #D6CFC4;
+      --stone:      #A89F92;
+      --slate:      #6B6357;
+      --charcoal:   #2E2A26;
+      --honey:      #C9B79C;
+
+      --font:       'Inter', system-ui, -apple-system, sans-serif;
+      --hairline:   0.5pt;
+      --rule:       0.7pt;
+      --rule-bold:  1.2pt;
+
+      /* Page geometry — overridden for A4 below. Letter default. */
+      --page-w:     215.9mm;  /* 8.5in */
+      --page-h:     279.4mm;  /* 11in  */
+      --margin-x:   12mm;
+      --margin-y:   12mm;
+
+      /* Two-column split — meal grid : grocery list. */
+      --col-meal:    55%;
+      --col-grocery: 45%;
+      --col-gap:     9mm;
+
+      /* Vertical rhythm */
+      --header-gap-below: 7mm;
+      --notes-gap-above:  6mm;
+      --footer-gap-above: 4mm;
+    }
+
+    body[data-size="a4"] {
+      --page-w: 210mm;
+      --page-h: 297mm;
+    }
+
+    @page { margin: 0; }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      font-family: var(--font);
+      color: var(--charcoal);
+      font-weight: 400;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    /* ============ Page chrome ============ */
+    .page {
+      width: var(--page-w);
+      height: var(--page-h);
+      padding: var(--margin-y) var(--margin-x);
+      background: var(--off-white);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* ============ HEADER STRIP ============
+       Wordmark · WEEK OF ______________ · [Sunday Start] */
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 8mm;
+      padding-bottom: 5mm;
+      margin-bottom: var(--header-gap-below);
+      border-bottom: var(--rule) solid var(--stone);
+    }
+    .wordmark {
+      flex: 0 0 auto;
+      font-size: 7.5pt;
+      font-weight: 500;
+      letter-spacing: 0.42em;
+      color: var(--slate);
+      text-transform: uppercase;
+    }
+    .week-of {
+      flex: 1;
+      display: flex;
+      align-items: baseline;
+      gap: 4mm;
+      justify-content: center;
+    }
+    .week-of-label {
+      font-size: 9.5pt;
+      font-weight: 500;
+      letter-spacing: 0.32em;
+      color: var(--charcoal);
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .week-of-line {
+      flex: 1 1 60mm;
+      max-width: 80mm;
+      height: var(--hairline);
+      background: var(--slate);
+    }
+    .week-start-chip {
+      flex: 0 0 auto;
+      font-size: 7pt;
+      font-weight: 500;
+      letter-spacing: 0.32em;
+      color: var(--charcoal);
+      text-transform: uppercase;
+      padding: 1.6mm 3.5mm 1.2mm;
+      border: var(--hairline) solid var(--honey);
+    }
+
+    /* ============ TWO-COLUMN BODY ============
+       Meal grid + Grocery, with a subtle dashed center divider as the
+       conceptual tear-line (not a literal perforation — the description
+       copy carries that affordance; the visual cue just hints at it). */
+    .body {
+      flex: 1;
+      display: flex;
+      gap: var(--col-gap);
+      position: relative;
+      min-height: 0;
+    }
+    .tear-line {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: calc(var(--col-meal));
+      width: 0;
+      border-left: var(--hairline) dashed var(--stone);
+      transform: translateX(calc(var(--col-gap) / -2));
+      pointer-events: none;
+    }
+
+    /* Shared column label sits above each half — "Meals" / "Grocery — by aisle" */
+    .col-label {
+      font-size: 8.5pt;
+      font-weight: 600;
+      letter-spacing: 0.32em;
+      color: var(--charcoal);
+      text-transform: uppercase;
+      padding-bottom: 3mm;
+      margin-bottom: 4mm;
+      border-bottom: var(--rule) solid var(--charcoal);
+    }
+
+    /* ============ MEAL GRID — 7 days × 3 meals (B/L/D) ============
+       Day label is rotated 90° on the left edge — category convention
+       (MyLifePlans + MarrMar both do this; iconic, frees horizontal
+       space). Rows auto-balance to fill available height. */
+    .meal-grid {
+      flex: 0 0 var(--col-meal);
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .meal-subheader {
+      display: grid;
+      grid-template-columns: 10mm 1fr 1fr 1fr;
+      gap: 0;
+      margin-bottom: 1.2mm;
+    }
+    .meal-subheader > div {
+      font-size: 6.8pt;
+      font-weight: 500;
+      letter-spacing: 0.24em;
+      color: var(--slate);
+      text-transform: uppercase;
+      padding-left: 2mm;
+    }
+    .meal-subheader > div:first-child { padding: 0; }
+
+    .meal-days {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 10mm 1fr 1fr 1fr;
+      grid-template-rows: repeat(7, 1fr);
+      border-top: var(--hairline) solid var(--stone);
+      border-left: var(--hairline) solid var(--stone);
+    }
+    .day-cell {
+      border-right: var(--hairline) solid var(--sand);
+      border-bottom: var(--hairline) solid var(--sand);
+      padding: 1.5mm 2mm;
+      position: relative;
+    }
+    .day-label-cell {
+      border-right: var(--hairline) solid var(--stone);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+    }
+    .day-label {
+      font-size: 8pt;
+      font-weight: 600;
+      letter-spacing: 0.28em;
+      color: var(--charcoal);
+      text-transform: uppercase;
+      writing-mode: vertical-rl;
+      transform: rotate(180deg);
+    }
+    /* Outer right + bottom borders darker for a clean frame */
+    .meal-days .day-cell:nth-child(4n) { border-right-color: var(--stone); }
+    .meal-days > :nth-last-child(-n+4) { border-bottom-color: var(--stone); }
+
+    /* ============ GROCERY — aisle-grouped ============
+       This is the visual signature: six labeled stacks (Produce, Proteins,
+       Dairy, Pantry, Freezer, Other), each with hairline-ruled write-on
+       lines. Honey rule above each aisle label is the brand-color anchor
+       that makes the aisle-grouping read at thumbnail. */
+    .grocery {
+      flex: 1 1 auto;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .grocery-aisles {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+    .aisle {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding-top: 0;
+    }
+    .aisle:not(:first-child) { margin-top: 3mm; }
+    .aisle-label {
+      font-size: 9pt;
+      font-weight: 700;
+      letter-spacing: 0.32em;
+      color: var(--charcoal);
+      text-transform: uppercase;
+      padding-top: 2mm;
+      padding-bottom: 1.5mm;
+      border-top: var(--rule-bold) solid var(--honey);
+    }
+    .aisle-lines {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+    .aisle-line {
+      flex: 1;
+      border-bottom: var(--hairline) solid var(--sand);
+      min-height: 4.5mm;
+    }
+
+    /* ============ NOTES strip (full-width bottom) ============
+       Sits below both columns so the tear-line in the body stays clean.
+       Two lines is plenty for budget/leftover/reminder tracking without
+       crowding the planning area above. */
+    .notes {
+      margin-top: var(--notes-gap-above);
+      padding-top: 4mm;
+      border-top: var(--rule) solid var(--stone);
+      display: flex;
+      flex-direction: column;
+      gap: 2.5mm;
+    }
+    .notes-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+    }
+    .notes-label {
+      font-size: 8.5pt;
+      font-weight: 600;
+      letter-spacing: 0.32em;
+      color: var(--charcoal);
+      text-transform: uppercase;
+    }
+    .notes-sub {
+      font-size: 6.5pt;
+      font-weight: 400;
+      letter-spacing: 0.22em;
+      color: var(--stone);
+      text-transform: uppercase;
+    }
+    .notes-lines {
+      display: grid;
+      grid-template-rows: repeat(2, 1fr);
+      min-height: 13mm;
+    }
+    .notes-line {
+      border-bottom: var(--hairline) solid var(--sand);
+    }
+
+    /* ============ Footer ============ */
+    .footer {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      padding-top: 4mm;
+      margin-top: var(--footer-gap-above);
+      border-top: var(--hairline) solid var(--sand);
+      font-size: 6pt;
+      font-weight: 400;
+      letter-spacing: 0.3em;
+      color: var(--stone);
+      text-transform: uppercase;
+    }
+  </style>
+</head>
+
+<body data-start="sun" data-size="letter">
+
+  <div class="page">
+
+    <!-- ========== HEADER STRIP ========== -->
+    <header class="header">
+      <div class="wordmark">HillwardStudio</div>
+      <div class="week-of">
+        <span class="week-of-label">Week of</span>
+        <span class="week-of-line"></span>
+      </div>
+      <div class="week-start-chip">Sunday Start</div>
+    </header>
+
+    <!-- ========== TWO-COLUMN BODY ========== -->
+    <div class="body">
+
+      <!-- Conceptual tear-line between meal grid and grocery -->
+      <div class="tear-line" aria-hidden="true"></div>
+
+      <!-- MEAL GRID -->
+      <section class="meal-grid">
+        <div class="col-label">Meals</div>
+        <div class="meal-subheader">
+          <div></div>
+          <div>Breakfast</div>
+          <div>Lunch</div>
+          <div>Dinner</div>
+        </div>
+        <div class="meal-days" id="meal-days"></div>
+      </section>
+
+      <!-- GROCERY (aisle-grouped) -->
+      <section class="grocery">
+        <div class="col-label">Grocery — by aisle</div>
+        <div class="grocery-aisles">
+          <div class="aisle">
+            <div class="aisle-label">Produce</div>
+            <div class="aisle-lines" data-lines="5"></div>
+          </div>
+          <div class="aisle">
+            <div class="aisle-label">Proteins</div>
+            <div class="aisle-lines" data-lines="5"></div>
+          </div>
+          <div class="aisle">
+            <div class="aisle-label">Dairy</div>
+            <div class="aisle-lines" data-lines="5"></div>
+          </div>
+          <div class="aisle">
+            <div class="aisle-label">Pantry</div>
+            <div class="aisle-lines" data-lines="5"></div>
+          </div>
+          <div class="aisle">
+            <div class="aisle-label">Freezer</div>
+            <div class="aisle-lines" data-lines="5"></div>
+          </div>
+          <div class="aisle">
+            <div class="aisle-label">Other</div>
+            <div class="aisle-lines" data-lines="5"></div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- ========== NOTES strip ========== -->
+    <section class="notes">
+      <div class="notes-header">
+        <span class="notes-label">Notes</span>
+        <span class="notes-sub">Budget · Leftovers · Reminders</span>
+      </div>
+      <div class="notes-lines">
+        <div class="notes-line"></div>
+        <div class="notes-line"></div>
+      </div>
+    </section>
+
+    <!-- ========== Footer ========== -->
+    <footer class="footer">
+      <span>HillwardStudio · Personal Use</span>
+      <span class="footer-meta">Weekly Meal Planner · Aisle-Grouped Grocery</span>
+    </footer>
+
+  </div>
+
+  <script>
+    /* Build the variant-dependent pieces:
+         - 7 day rows in the order determined by data-start (sun | mon)
+         - aisle write-on lines per [data-lines]
+         - week-start chip label + footer meta sentence */
+    (function build() {
+      const body = document.body;
+      const start = body.getAttribute('data-start') === 'mon' ? 'mon' : 'sun';
+
+      const DAYS_SUN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const DAYS_MON = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      const days = start === 'mon' ? DAYS_MON : DAYS_SUN;
+
+      const grid = document.getElementById('meal-days');
+      const frag = document.createDocumentFragment();
+      for (const d of days) {
+        const labelWrap = document.createElement('div');
+        labelWrap.className = 'day-cell day-label-cell';
+        const label = document.createElement('span');
+        label.className = 'day-label';
+        label.textContent = d;
+        labelWrap.appendChild(label);
+        frag.appendChild(labelWrap);
+        for (let i = 0; i < 3; i++) {
+          const cell = document.createElement('div');
+          cell.className = 'day-cell meal-cell';
+          frag.appendChild(cell);
+        }
+      }
+      grid.appendChild(frag);
+
+      document.querySelectorAll('.aisle-lines').forEach(el => {
+        const n = parseInt(el.getAttribute('data-lines') || '5', 10);
+        for (let i = 0; i < n; i++) {
+          const line = document.createElement('div');
+          line.className = 'aisle-line';
+          el.appendChild(line);
+        }
+      });
+
+      const startLabel = start === 'mon' ? 'Monday Start' : 'Sunday Start';
+      const chip = document.querySelector('.week-start-chip');
+      if (chip) chip.textContent = startLabel;
+      const meta = document.querySelector('.footer-meta');
+      if (meta) {
+        meta.textContent =
+          `Weekly Meal Planner · Aisle-Grouped Grocery · ${startLabel}`;
+      }
+    })();
+  </script>
+
+</body>
+</html>

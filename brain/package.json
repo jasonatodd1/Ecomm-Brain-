@@ -23,6 +23,7 @@
     "resynth:meal-planner-v5": "tsx src/jobs/resynthesize-meal-planner-v5.ts",
     "research:nurserywallart": "tsx src/jobs/research-decision.ts --decision-id=2af0ba72-2fe0-452e-b5d8-d888ee4cdeea",
     "render:planner": "tsx src/render/planner.ts",
+    "build:meal-planner": "tsx src/render/meal-planner.ts",
     "resize:print": "tsx src/tools/resize-print-variants.ts",
     "build:bundle": "tsx src/tools/build-print-bundle.ts",
     "render:graphic": "tsx src/render/render-graphic.ts",

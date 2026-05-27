@@ -2,7 +2,7 @@
 
 > Paste this entire document into a fresh Claude conversation to pick up where the previous one left off. Verify-flagged items (`[VERIFY]`) are values the AI could not confirm from code/Supabase alone and should be re-checked by the operator.
 
-Last updated: 2026-05-27. Reflects **Research Agent v3.2** (multi-wedge differentiation thesis with per-wedge grounding tags) + meal planner v5 brief.
+Last updated: 2026-05-27. Reflects **Research Agent v3.2** (multi-wedge differentiation thesis with per-wedge grounding tags) + meal planner v5 brief + **meal planner asset v1** (HTML/CSS/Puppeteer printable PDF, 4 SKUs).
 
 ---
 
@@ -165,6 +165,7 @@ Root: `brain/`. All paths below are relative to that.
 
 ### `src/render/`
 - **`planner.ts`** — `npm run render:planner`. Headless Puppeteer renders `products/hillward-a5-monthly/template/index.html` to `dist/planner-v1.pdf` at A5 with `preferCSSPageSize`. Waits for `document.fonts.ready` so Google Fonts (`Inter`) embed correctly. Creates `dist/` if missing (gitignored).
+- **`meal-planner.ts`** — `npm run build:meal-planner`. Renders one HTML/CSS template (`products/hillward-meal-planner/templates/index.html`) into 4 printable PDFs (`meal-planner-{sun|mon}-{letter|a4}.pdf`) by flipping `data-start` / `data-size` body attributes via `page.evaluate` before each `page.pdf` call. Reuses one Puppeteer browser across all 4 renders (~5s total). Output lands in `products/hillward-meal-planner/deliverables/` (gitignored). Structured-document asset pattern — same shape as `planner.ts` but parameterized for variants. Manual visual iteration: until the `refine:graphic` loop's known flaws are fixed (rewrites assets, critic false-passes wireframes), operator-driven visual review is the iteration loop for structured documents.
 - **`render-graphic.ts`** — `npm run render:graphic <input.html> <output.{png,jpg}>`. Generic screenshot tool for listing assets. Output format is inferred from the file extension: `.jpg`/`.jpeg` → JPEG quality 92, anything else → PNG. Used for the bunny "What's Included" graphic at 2000×2000.
 
 ### `src/lib/`
@@ -187,7 +188,8 @@ Root: `brain/`. All paths below are relative to that.
 - **`hillward-a5-monthly/template/index.html`** — full 28-page A5 monthly planner template (cover + 24 monthly spreads + 3 notes pages). v3 iteration: SVG-rendered dot grid, larger dot radius, Inter ExtraLight cover, editorial layout, priorities sidebar, system marks, weekend tint. Inline CSS, Google Fonts.
 - **`hillward-nursery-bunny/master/bunny 10.png`** — the master illustration. 5008×6680 px [VERIFY], serves as input to `resize:print`.
 - **`hillward-nursery-bunny/template/whats-included.html`** — 2000×2000 listing graphic ("What's Included" eyebrow + product summary). Rendered via `render:graphic`.
-- `products/*/dist/` is gitignored — regenerable from templates.
+- **`hillward-meal-planner/templates/index.html`** — single parameterized source for the 4-SKU meal planner. Rendered to 4 PDFs by `meal-planner.ts` via `data-start` (sun/mon) + `data-size` (letter/a4) body attributes. CSS uses custom properties + semantic class names so visual iteration is clean (no magic numbers buried in deep selectors). 4 deliverables registered as `printable_pdf` assets against product_brief_id `cb213bf4` (v5 brief).
+- `products/*/dist/` and `products/*/deliverables/` are gitignored — regenerable from templates.
 
 ### Other top-level files
 - `brain/PRINCIPLES.md` — architecture canon

@@ -4,6 +4,14 @@
 
 ## Current Focus
 
+### Meal planner asset v1 (shipped 2026-05-27)
+- [x] **Parameterized HTML/CSS/Puppeteer template** — single source in `products/hillward-meal-planner/templates/index.html` parameterized by `data-start` (sun/mon) and `data-size` (letter/a4) attributes flipped by `src/render/meal-planner.ts` before each PDF render. 4 SKUs (`meal-planner-{sun|mon}-{letter|a4}.pdf`) rendered in ~5s total. `npm run build:meal-planner`.
+- [x] **`printable_pdf` asset kind** — migration 0011 + `assets.ts` constant. Distinct from `source_file` (master file behind a deliverable): a `printable_pdf` IS the customer-facing PDF for printable products (planners, trackers, charts).
+- [x] **4 SKUs linked to brief** `cb213bf4-5225-4bc9-b4ac-67f2167c9b8f` via `link:asset` — all four `printable_pdf` rows present in `assets`.
+- [ ] **Visual iteration v1 → v2** — manual operator review loop (visual feedback loop's known flaws mean we don't trust autonomous iteration on design yet).
+- [ ] **Listing photos** for hero / lifestyle / whats_included / lifestyle_detail slots (image_spec from v5 brief).
+- [ ] **Listing Agent → publish** for meal planner once photos and final asset land.
+
 ### Research Agent v3.2 + meal planner v5 brief (shipped 2026-05-27)
 - [x] **Multi-wedge differentiation thesis** — `differentiation_thesis.wedges[]` with per-wedge grounding tags (`buyer-voice-backed` / `partial-buyer-voice-backed` / `incumbent-inferred` / `speculative`). Each wedge cites supporting_evidence + counter_evidence so the grounding discipline does not depend on careful prose. Wedge type taxonomy: workflow / customization / aesthetic / audience / pricing / other. See `RESEARCH_AGENT.md` §4.
 - [x] **Meal planner v5 brief** — `npm run resynth:meal-planner-v5` re-synthesizes v4's data into a multi-wedge thesis (no new data collection). Lead wedge = workflow `incumbent-inferred`; second wedge = customization `partial-buyer-voice-backed` (backed by password-protection + inflexible-entry pain; honest counter-evidence: analytics buyers are not the audience). Asset spec unchanged.
