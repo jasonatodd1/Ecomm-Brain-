@@ -4,11 +4,14 @@
 
 ## Current Focus
 
-### Meal planner asset v1 (shipped 2026-05-27)
+### Meal planner asset v2 (shipped 2026-05-27)
 - [x] **Parameterized HTML/CSS/Puppeteer template** — single source in `products/hillward-meal-planner/templates/index.html` parameterized by `data-start` (sun/mon) and `data-size` (letter/a4) attributes flipped by `src/render/meal-planner.ts` before each PDF render. 4 SKUs (`meal-planner-{sun|mon}-{letter|a4}.pdf`) rendered in ~5s total. `npm run build:meal-planner`.
 - [x] **`printable_pdf` asset kind** — migration 0011 + `assets.ts` constant. Distinct from `source_file` (master file behind a deliverable): a `printable_pdf` IS the customer-facing PDF for printable products (planners, trackers, charts).
-- [x] **4 SKUs linked to brief** `cb213bf4-5225-4bc9-b4ac-67f2167c9b8f` via `link:asset` — all four `printable_pdf` rows present in `assets`.
-- [ ] **Visual iteration v1 → v2** — manual operator review loop (visual feedback loop's known flaws mean we don't trust autonomous iteration on design yet).
+- [x] **4 SKUs linked to brief** `cb213bf4-5225-4bc9-b4ac-67f2167c9b8f` via `link:asset` — all four `printable_pdf` rows present in `assets`. v2 re-renders overwrite the same file paths; rows unchanged.
+- [x] **v1 → v2 fixes** —
+  - Mid-page dashed "perforation" between meal grid and grocery REMOVED. It implied tearing the page in half, which destroys the one-sheet shop-with-it workflow that is the wedge. Tear-off positioning now lives only in listing copy + hero photo (whole sheet tears off a pad).
+  - Grocery aisle hierarchy: removed the honey rule above each aisle label. v1's parallel honey-rule + sand-writing-rules read as one stack of similar horizontal lines; section structure was lost. v2 carries the break with bold uppercase typography + 5mm whitespace between sections.
+  - PDF render: switched to `preferCSSPageSize: true` with the `@page { size: letter | A4; margin: 0 }` rule injected per render. v1 double-declared geometry (Puppeteer `format` + CSS mm dimensions); v2 has one source of truth (CSS @page) and a single Puppeteer `printBackground+preferCSSPageSize` call. All 4 PDFs open cleanly in Preview. See `AI_HANDOFF.md` §Puppeteer PDF.
 - [ ] **Listing photos** for hero / lifestyle / whats_included / lifestyle_detail slots (image_spec from v5 brief).
 - [ ] **Listing Agent → publish** for meal planner once photos and final asset land.
 

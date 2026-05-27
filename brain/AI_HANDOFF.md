@@ -2,7 +2,7 @@
 
 > Paste this entire document into a fresh Claude conversation to pick up where the previous one left off. Verify-flagged items (`[VERIFY]`) are values the AI could not confirm from code/Supabase alone and should be re-checked by the operator.
 
-Last updated: 2026-05-27. Reflects **Research Agent v3.2** (multi-wedge differentiation thesis with per-wedge grounding tags) + meal planner v5 brief + **meal planner asset v1** (HTML/CSS/Puppeteer printable PDF, 4 SKUs).
+Last updated: 2026-05-27. Reflects **Research Agent v3.2** (multi-wedge differentiation thesis with per-wedge grounding tags) + meal planner v5 brief + **meal planner asset v2** (HTML/CSS/Puppeteer printable PDF, 4 SKUs; v1→v2 fixes: mid-page perforation removed, grocery hierarchy clarified, PDF render switched to `preferCSSPageSize: true`).
 
 ---
 
@@ -165,7 +165,9 @@ Root: `brain/`. All paths below are relative to that.
 
 ### `src/render/`
 - **`planner.ts`** — `npm run render:planner`. Headless Puppeteer renders `products/hillward-a5-monthly/template/index.html` to `dist/planner-v1.pdf` at A5 with `preferCSSPageSize`. Waits for `document.fonts.ready` so Google Fonts (`Inter`) embed correctly. Creates `dist/` if missing (gitignored).
-- **`meal-planner.ts`** — `npm run build:meal-planner`. Renders one HTML/CSS template (`products/hillward-meal-planner/templates/index.html`) into 4 printable PDFs (`meal-planner-{sun|mon}-{letter|a4}.pdf`) by flipping `data-start` / `data-size` body attributes via `page.evaluate` before each `page.pdf` call. Reuses one Puppeteer browser across all 4 renders (~5s total). Output lands in `products/hillward-meal-planner/deliverables/` (gitignored). Structured-document asset pattern — same shape as `planner.ts` but parameterized for variants. Manual visual iteration: until the `refine:graphic` loop's known flaws are fixed (rewrites assets, critic false-passes wireframes), operator-driven visual review is the iteration loop for structured documents.
+- **`meal-planner.ts`** — `npm run build:meal-planner`. Renders one HTML/CSS template (`products/hillward-meal-planner/templates/index.html`) into 4 printable PDFs (`meal-planner-{sun|mon}-{letter|a4}.pdf`) by flipping `data-start` / `data-size` body attributes AND injecting `@page { size: letter | A4; margin: 0 }` via `page.evaluate` before each `page.pdf` call. PDF call uses `preferCSSPageSize: true` + `printBackground: true` only — no `format` / `margin` overrides so CSS is the one source of truth for page geometry. Reuses one Puppeteer browser across all 4 renders (~5s total). Output lands in `products/hillward-meal-planner/deliverables/` (gitignored). Structured-document asset pattern — same shape as `planner.ts` but parameterized for variants. Manual visual iteration: until the `refine:graphic` loop's known flaws are fixed (rewrites assets, critic false-passes wireframes), operator-driven visual review is the iteration loop for structured documents.
+
+**Puppeteer PDF lesson (from v1→v2):** Don't double-declare page geometry. v1 passed Puppeteer `format: 'Letter' | 'A4'` + `margin: { 0, 0, 0, 0 }` AND sized `.page` in mm to match. The PDFs WERE structurally valid (correct MediaBox, %%EOF, 324+ content streams; opened from `open -a Preview` and via AppleScript) but the dual declaration produced subtle conflicts in some macOS PDF reader code paths. Fix: inject a per-render `<style>@page { size: <variant>; margin: 0 }</style>` and call `page.pdf({ path, printBackground: true, preferCSSPageSize: true })`. One source of truth → cleaner output, opens reliably everywhere. Apply this pattern to any future per-variant PDF rendering.
 - **`render-graphic.ts`** — `npm run render:graphic <input.html> <output.{png,jpg}>`. Generic screenshot tool for listing assets. Output format is inferred from the file extension: `.jpg`/`.jpeg` → JPEG quality 92, anything else → PNG. Used for the bunny "What's Included" graphic at 2000×2000.
 
 ### `src/lib/`

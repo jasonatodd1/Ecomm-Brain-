@@ -16,6 +16,19 @@
 // (gitignored). One Puppeteer browser instance reused across all 4 renders
 // for speed — total runtime stays well under 10s on M-series hardware.
 //
+// PDF SIZING — read this before changing anything:
+//   v1 used Puppeteer's `format: 'Letter' | 'A4'` param plus an explicit
+//   `margin: 0` and the template's `.page` div sized in mm. Two systems
+//   were declaring the page geometry (Puppeteer + the .page div). The
+//   output PDFs WERE structurally valid (correct MediaBox, %%EOF, content
+//   streams) and opened in Preview from `open -a Preview`, but produced
+//   subtle mismatches that confused some macOS PDF reader code paths.
+//
+//   v2 follows the Puppeteer recommendation: CSS owns the page size via
+//   an `@page { size: <variant>; margin: 0 }` rule injected per render,
+//   and page.pdf() is called with `preferCSSPageSize: true` and NO
+//   `format` / `margin` overrides. One source of truth for page geometry.
+//
 // CLI:
 //   npm run build:meal-planner
 
@@ -37,15 +50,15 @@ interface SkuVariant {
   start: WeekStart;
   size: PaperSize;
   filename: string;
-  /** Pupeteer page.pdf format value. */
-  pdfFormat: 'Letter' | 'A4';
+  /** CSS @page `size` keyword — letter | A4. */
+  cssPageSize: 'letter' | 'A4';
 }
 
 const SKUS: SkuVariant[] = [
-  { start: 'sun', size: 'letter', filename: 'meal-planner-sun-letter.pdf', pdfFormat: 'Letter' },
-  { start: 'mon', size: 'letter', filename: 'meal-planner-mon-letter.pdf', pdfFormat: 'Letter' },
-  { start: 'sun', size: 'a4',     filename: 'meal-planner-sun-a4.pdf',     pdfFormat: 'A4'     },
-  { start: 'mon', size: 'a4',     filename: 'meal-planner-mon-a4.pdf',     pdfFormat: 'A4'     }
+  { start: 'sun', size: 'letter', filename: 'meal-planner-sun-letter.pdf', cssPageSize: 'letter' },
+  { start: 'mon', size: 'letter', filename: 'meal-planner-mon-letter.pdf', cssPageSize: 'letter' },
+  { start: 'sun', size: 'a4',     filename: 'meal-planner-sun-a4.pdf',     cssPageSize: 'A4'     },
+  { start: 'mon', size: 'a4',     filename: 'meal-planner-mon-a4.pdf',     cssPageSize: 'A4'     }
 ];
 
 interface RenderedSku extends SkuVariant {
@@ -73,11 +86,21 @@ async function renderOne(
     // at call time, but it self-invoked on first parse. Simplest reliable
     // path: rebuild the variant-dependent DOM in-page.
     await page.evaluate(
-      ({ startAttr, sizeAttr }) => {
+      ({ startAttr, sizeAttr, cssPageSize }) => {
         /* eslint-disable @typescript-eslint/no-explicit-any */
         const doc = (globalThis as any).document;
         doc.body.setAttribute('data-start', startAttr);
         doc.body.setAttribute('data-size', sizeAttr);
+
+        // Inject the @page rule for this variant. preferCSSPageSize=true
+        // in page.pdf() reads this and uses it as the physical page size,
+        // so we have ONE source of truth for geometry (CSS), not two.
+        const existing = doc.getElementById('page-size-style');
+        if (existing) existing.remove();
+        const style = doc.createElement('style');
+        style.id = 'page-size-style';
+        style.textContent = `@page { size: ${cssPageSize}; margin: 0; }`;
+        doc.head.appendChild(style);
 
         const startLabel = startAttr === 'mon' ? 'Monday Start' : 'Sunday Start';
         const DAYS_SUN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -111,17 +134,19 @@ async function renderOne(
             `Weekly Meal Planner · Aisle-Grouped Grocery · ${startLabel}`;
         }
       },
-      { startAttr: sku.start, sizeAttr: sku.size }
+      { startAttr: sku.start, sizeAttr: sku.size, cssPageSize: sku.cssPageSize }
     );
 
     await page.evaluateHandle('document.fonts.ready');
 
+    // CSS owns the page size via the injected @page rule above. We pass
+    // preferCSSPageSize: true and deliberately omit format/margin so
+    // Puppeteer doesn't fight the CSS. Cleaner, more standards-aligned
+    // PDF output than v1 (which double-declared geometry).
     await page.pdf({
       path: outputPath,
-      format: sku.pdfFormat,
       printBackground: true,
-      margin: { top: 0, right: 0, bottom: 0, left: 0 },
-      preferCSSPageSize: false
+      preferCSSPageSize: true
     });
   } finally {
     await page.close();
@@ -134,7 +159,7 @@ async function renderOne(
 
 async function main(): Promise<void> {
   const overallStart = Date.now();
-  console.log('> rendering HillwardStudio meal planner v1 (4 SKUs)');
+  console.log('> rendering HillwardStudio meal planner v2 (4 SKUs)');
   console.log(`  source: ${INPUT_HTML}`);
   console.log(`  output: ${OUTPUT_DIR}`);
   console.log('');

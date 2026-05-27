@@ -8,8 +8,21 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
     /* ============================================================
-       HillwardStudio Meal Planner — v1
+       HillwardStudio Meal Planner — v2
        One-page weekly meal grid + aisle-grouped grocery list.
+
+       v2 changes vs v1:
+         - Mid-page dashed "tear-line" REMOVED. The tear-off positioning
+           lives in listing copy / hero photo (the whole sheet tears off
+           a pad). Putting a perforation IN the page implied tearing the
+           page in half — which destroys the one-sheet workflow.
+         - Aisle headers no longer use a honey rule above the label. The
+           parallel honey-rule + writing-lines pattern read as a stack of
+           similar horizontal lines and lost the section hierarchy. Bold
+           uppercase typography + extra whitespace now carries the break.
+         - Page size is now declared via @page (preferCSSPageSize: true)
+           instead of Puppeteer's `format` param + manual margin — cleaner
+           PDF output that opens reliably across Mac PDF readers.
 
        Asset spec locked by v5 brief cb213bf4.
        Required elements (do not remove):
@@ -24,12 +37,18 @@
        Variants (set on <body> by Puppeteer pre-render):
          data-start="sun" | "mon"
          data-size="letter" | "a4"
+
+       Puppeteer also injects a one-line <style> tag that sets
+         @page { size: letter | A4; margin: 0 }
+       so each variant gets the right physical page dimensions.
        ============================================================ */
 
     :root {
       /* Palette — HillwardStudio warm-neutral system.
-         Honey is the single accent (used for aisle rules + start chip).
-         Everything else is grayscale-ish so ink coverage stays low. */
+         Honey is now reserved for the single week-start chip — one
+         disciplined accent, instead of competing with the grocery
+         writing lines. Everything else is grayscale-ish so ink
+         coverage stays low. */
       --off-white:  #F7F5F2;
       --cream:      #EDE8E1;
       --sand:       #D6CFC4;
@@ -65,7 +84,10 @@
       --page-h: 297mm;
     }
 
-    @page { margin: 0; }
+    /* @page rule is injected at render time by the Puppeteer wrapper —
+       see src/render/meal-planner.ts. Keeping it dynamic lets one
+       template serve both Letter and A4 with a single page.pdf() call
+       per variant and preferCSSPageSize: true. */
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -140,25 +162,17 @@
     }
 
     /* ============ TWO-COLUMN BODY ============
-       Meal grid + Grocery, with a subtle dashed center divider as the
-       conceptual tear-line (not a literal perforation — the description
-       copy carries that affordance; the visual cue just hints at it). */
+       Meal grid + Grocery, separated only by --col-gap whitespace.
+       v1 had a dashed mid-page "tear-line" here — REMOVED in v2
+       because it implied tearing the sheet in half, which destroys
+       the one-sheet shop-with-it workflow that IS the wedge. The
+       tear-off concept lives in listing copy + the hero photo (whole
+       sheet tears off a pad), not on the printed page. */
     .body {
       flex: 1;
       display: flex;
       gap: var(--col-gap);
-      position: relative;
       min-height: 0;
-    }
-    .tear-line {
-      position: absolute;
-      top: 0;
-      bottom: 0;
-      left: calc(var(--col-meal));
-      width: 0;
-      border-left: var(--hairline) dashed var(--stone);
-      transform: translateX(calc(var(--col-gap) / -2));
-      pointer-events: none;
     }
 
     /* Shared column label sits above each half — "Meals" / "Grocery — by aisle" */
@@ -234,10 +248,15 @@
     .meal-days > :nth-last-child(-n+4) { border-bottom-color: var(--stone); }
 
     /* ============ GROCERY — aisle-grouped ============
-       This is the visual signature: six labeled stacks (Produce, Proteins,
-       Dairy, Pantry, Freezer, Other), each with hairline-ruled write-on
-       lines. Honey rule above each aisle label is the brand-color anchor
-       that makes the aisle-grouping read at thumbnail. */
+       Six labeled stacks (Produce, Proteins, Dairy, Pantry, Freezer,
+       Other), each with hairline-ruled write-on lines.
+
+       v1 had a honey rule ABOVE each aisle label. Removed in v2: the
+       parallel honey-rule + sand-writing-rules read as one stack of
+       similar horizontal lines and lost the section hierarchy. v2
+       carries the break with bold uppercase typography + extra
+       whitespace between sections — the label visually owns its rows
+       below without competing with them. */
     .grocery {
       flex: 1 1 auto;
       display: flex;
@@ -253,18 +272,17 @@
       flex: 1;
       display: flex;
       flex-direction: column;
-      padding-top: 0;
     }
-    .aisle:not(:first-child) { margin-top: 3mm; }
+    /* Whitespace IS the section divider. Slightly larger than v1's 3mm
+       to compensate for losing the honey rule as a visual break. */
+    .aisle:not(:first-child) { margin-top: 5mm; }
     .aisle-label {
       font-size: 9pt;
       font-weight: 700;
       letter-spacing: 0.32em;
       color: var(--charcoal);
       text-transform: uppercase;
-      padding-top: 2mm;
-      padding-bottom: 1.5mm;
-      border-top: var(--rule-bold) solid var(--honey);
+      padding-bottom: 2mm;
     }
     .aisle-lines {
       flex: 1;
@@ -278,9 +296,9 @@
     }
 
     /* ============ NOTES strip (full-width bottom) ============
-       Sits below both columns so the tear-line in the body stays clean.
-       Two lines is plenty for budget/leftover/reminder tracking without
-       crowding the planning area above. */
+       Sits below both columns. Two lines is plenty for budget /
+       leftover / reminder tracking without crowding the planning
+       area above. */
     .notes {
       margin-top: var(--notes-gap-above);
       padding-top: 4mm;
@@ -350,9 +368,6 @@
 
     <!-- ========== TWO-COLUMN BODY ========== -->
     <div class="body">
-
-      <!-- Conceptual tear-line between meal grid and grocery -->
-      <div class="tear-line" aria-hidden="true"></div>
 
       <!-- MEAL GRID -->
       <section class="meal-grid">
