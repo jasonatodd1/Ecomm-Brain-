@@ -18,13 +18,18 @@
   - Mid-page dashed "perforation" between meal grid and grocery REMOVED. It implied tearing the page in half, which destroys the one-sheet shop-with-it workflow that is the wedge. Tear-off positioning now lives only in listing copy + hero photo (whole sheet tears off a pad).
   - Grocery aisle hierarchy: removed the honey rule above each aisle label. v1's parallel honey-rule + sand-writing-rules read as one stack of similar horizontal lines; section structure was lost. v2 carries the break with bold uppercase typography + 5mm whitespace between sections.
   - PDF render: switched to `preferCSSPageSize: true` with the `@page { size: letter | A4; margin: 0 }` rule injected per render. v1 double-declared geometry (Puppeteer `format` + CSS mm dimensions); v2 has one source of truth (CSS @page) and a single Puppeteer `printBackground+preferCSSPageSize` call. All 4 PDFs open cleanly in Preview. See `AI_HANDOFF.md` §Puppeteer PDF.
-- [x] **Listing photos (programmatic)** — 3 of 6 shipped 2026-05-27 via `npm run render:meal-planner-photos`:
+- [x] **Listing photos (fal UI composites)** — 4 registered 2026-05-27 from Jason's fal UI session. Moved from Desktop into `products/hillward-meal-planner/listing-photos/` with numeric-prefix naming (`meal-planner-NN-{role}.{ext}` sets Etsy display order):
+  - `01-hero` — overhead cream linen flat-lay, mug + pen, clean page
+  - `02-lifestyle-in-use` — handwriting filled in, dated Oct 23 (customization wedge)
+  - `03-lifestyle-grocery-store` — hand holding planner at produce aisle (workflow wedge)
+  - `04-lifestyle-kitchen` — planner on kitchen counter with cookbook + bowl
+  All linked to brief `cb213bf4` via `link:asset` (kind: hero / lifestyle, source: fal_ui).
+- [x] **Listing photos (programmatic)** — 3 shipped 2026-05-27 via `npm run render:meal-planner-photos`:
   - `pdf-preview.png` (artwork_flat, 2550×3300 @ 300dpi) — canonical mon-letter v4 page; doubles as listing photo + fal compositing input
   - `detail-aisle-headers.png` (lifestyle_detail, 1001×2339) — tight crop of all 6 aisle headers, calls out the structural innovation
   - `whats-included.png` (whats_included, 3000×3000) — 2×2 SKU grid composite (Sun/Mon × Letter/A4) with labels
   All linked to brief `cb213bf4` via `link:asset`. No new asset kinds needed — reused existing artwork_flat / lifestyle_detail / whats_included from the bunny.
-- [ ] **Listing photos (fal UI composites)** — 3 of 6 are Jason's manual step using `pdf-preview.png` as the input: hero (page on cream linen + pen + mug just out of frame, per v5 image_spec[0]), lifestyle (grocery-store tear-off-take-with-you scene), lifestyle (kitchen counter weekly-planning scene). Meal planner lifestyle count is 3 vs bunny's 4 — utility product, no decor-room variations needed.
-- [ ] **Listing Agent → publish** for meal planner once fal lifestyle composites land.
+- [ ] **Listing Agent → publish** for meal planner — 7 listing photos registered (4 fal UI + 3 programmatic); ready once operator approves photo set + ordering.
 
 ### Research Agent v3.2 + meal planner v5 brief (shipped 2026-05-27)
 - [x] **Multi-wedge differentiation thesis** — `differentiation_thesis.wedges[]` with per-wedge grounding tags (`buyer-voice-backed` / `partial-buyer-voice-backed` / `incumbent-inferred` / `speculative`). Each wedge cites supporting_evidence + counter_evidence so the grounding discipline does not depend on careful prose. Wedge type taxonomy: workflow / customization / aesthetic / audience / pricing / other. See `RESEARCH_AGENT.md` §4.
