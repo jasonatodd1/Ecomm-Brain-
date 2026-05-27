@@ -4,10 +4,13 @@
 
 ## Current Focus
 
-### Meal planner asset v3 (shipped 2026-05-27)
+### Meal planner asset v4 (shipped 2026-05-27)
 - [x] **Parameterized HTML/CSS/Puppeteer template** — single source in `products/hillward-meal-planner/templates/index.html` parameterized by `data-start` (sun/mon) and `data-size` (letter/a4) attributes flipped by `src/render/meal-planner.ts` before each PDF render. 4 SKUs (`meal-planner-{sun|mon}-{letter|a4}.pdf`) rendered in ~5s total. `npm run build:meal-planner`.
 - [x] **`printable_pdf` asset kind** — migration 0011 + `assets.ts` constant. Distinct from `source_file` (master file behind a deliverable): a `printable_pdf` IS the customer-facing PDF for printable products (planners, trackers, charts).
-- [x] **4 SKUs linked to brief** `cb213bf4-5225-4bc9-b4ac-67f2167c9b8f` via `link:asset` — all four `printable_pdf` rows present in `assets`. v2/v3 re-renders overwrite the same file paths; rows unchanged.
+- [x] **4 SKUs linked to brief** `cb213bf4-5225-4bc9-b4ac-67f2167c9b8f` via `link:asset` — all four `printable_pdf` rows present in `assets`. v2/v3/v4 re-renders overwrite the same file paths; rows unchanged.
+- [x] **v3 → v4 polish** —
+  - NOTES section divider rule (the line ABOVE the NOTES heading) REMOVED. It sat in close vertical proximity to the two write-on lines below and read as part of a stacked-line cluster — same hierarchy problem v2 fix 3 solved at grocery aisle headers and v3 fix 2 solved at the footer. The principle is now consistent across the whole design: **structural dividers do not sit adjacent to writing lines**. `--notes-gap-above` bumped 6mm → 10mm to carry the demarcation via whitespace + bold uppercase NOTES typography. v3's footer-separator removal was already in place; the only structural divider near the writing lines in v3 was the `.notes border-top`, now gone.
+  - Build script noise audit: confirmed `npm run build:meal-planner` does NOT auto-open PDFs (never has — `puppeteer.launch({ headless: true })` is the only `launch`/`open` in the script). v2/v3 Preview windows came from a manual `open -a Preview` verification command run separately in the shell. Verification going forward uses on-disk header checks (`file`, MediaBox inspection) and PNG previews via `sips`, not Preview launches.
 - [x] **v2 → v3 polish** —
   - BREAKFAST / LUNCH / DINNER column headers centered over their columns (were left-aligned and floated off the visual center).
   - Footer separator rule removed. Same hierarchy problem as v2's aisle headers: a structural divider that reads identical to the Notes section's writing lines just above it. v3 lets `--footer-gap-above` (now 7mm) + the muted stone color of the footer microcopy carry the demarcation.

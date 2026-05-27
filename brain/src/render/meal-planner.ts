@@ -159,7 +159,7 @@ async function renderOne(
 
 async function main(): Promise<void> {
   const overallStart = Date.now();
-  console.log('> rendering HillwardStudio meal planner v3 (4 SKUs)');
+  console.log('> rendering HillwardStudio meal planner v4 (4 SKUs)');
   console.log(`  source: ${INPUT_HTML}`);
   console.log(`  output: ${OUTPUT_DIR}`);
   console.log('');

@@ -8,8 +8,18 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
     /* ============================================================
-       HillwardStudio Meal Planner — v3
+       HillwardStudio Meal Planner — v4
        One-page weekly meal grid + aisle-grouped grocery list.
+
+       v4 changes vs v3:
+         - NOTES section divider rule (above the heading) REMOVED.
+           Sat in close vertical proximity to the two write-on lines
+           below and read as part of a stacked-line cluster — same
+           hierarchy problem v2 fix 3 solved at grocery aisle headers
+           and v3 fix 2 solved at the footer. The principle is now
+           consistent across the design: structural dividers do NOT
+           sit adjacent to writing lines. Bold uppercase NOTES + the
+           wider --notes-gap-above (now 10mm) carries the demarcation.
 
        v3 changes vs v2:
          - Breakfast / Lunch / Dinner column headers centered (were
@@ -85,7 +95,11 @@
 
       /* Vertical rhythm */
       --header-gap-below: 7mm;
-      --notes-gap-above:  6mm;
+      --notes-gap-above:  10mm; /* v4: was 6mm + a hairline rule +
+                                   4mm padding-top. Rule removed; this
+                                   gap is now the sole demarcation
+                                   between the meal/grocery body and
+                                   the NOTES heading. */
       --footer-gap-above: 7mm;  /* v3: was 4mm + a hairline rule +
                                    4mm padding-top. Rule removed; this
                                    gap is now the sole demarcation
@@ -311,11 +325,18 @@
     /* ============ NOTES strip (full-width bottom) ============
        Sits below both columns. Two lines is plenty for budget /
        leftover / reminder tracking without crowding the planning
-       area above. */
+       area above.
+
+       v4: border-top + padding-top removed. The structural rule above
+       the NOTES heading sat in close vertical proximity to the two
+       write-on lines below and read as part of a 3-line stack — same
+       hierarchy problem we already solved at the grocery aisle headers
+       (v2 fix 3) and the footer separator (v3 fix). Bold uppercase
+       NOTES typography + the wider --notes-gap-above (now 10mm)
+       carries the demarcation. The writing lines stay because they're
+       functional (you write on them); they're not dividers. */
     .notes {
       margin-top: var(--notes-gap-above);
-      padding-top: 4mm;
-      border-top: var(--rule) solid var(--stone);
       display: flex;
       flex-direction: column;
       gap: 2.5mm;
