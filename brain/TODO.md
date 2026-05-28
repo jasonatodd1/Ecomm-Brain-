@@ -5,12 +5,18 @@
 
 ## Current Focus
 
-### Opportunity scanner (MVP shipped 2026-05-28 — now tune, then automate)
-Market-wide attackability scoring engine: `npm run opportunity:scan` reads `config/opportunity-seed-keywords.txt`, scores three pillars (Demand / Attackability / AI-fit) per niche, persists to `opportunity_scores`, writes `brain/opportunities/{date}.md`. First seed run cost ~$0.03. Next, in order:
-- [ ] **Tune `REVIEW_TO_SALES_MULTIPLIER` + attackability weights + gate thresholds** against the known fortress/open results in `brain/opportunities/2026-05-28.md` (all first-pass constants live at the top of `src/lib/opportunity-scoring.ts`).
-- [ ] **Fix the demand signal — TOP priority (see scanner KEY LIMITATION).** The Etsy public API can't reproduce on-site organic order and doesn't surface a niche's true high-review incumbents (sort_on=score tested, strictly worse). So `median_reviews`/`demand_pool` are a biased proxy and the demand pillar under-counts mature niches. Real fix = the paid keyword-volume tool (see Backlog) feeding real demand instead of modeled review-sales. Until then, treat demand sub-scores as provisional.
+### Opportunity scanner v2 — two-phase, eRank-in-the-loop (2026-05-28)
+Now two phases (the Etsy API can't reproduce organic ranking, so demand + attackability are sourced from a manual **eRank** pull; the API-derived versions are **deprecated as biased**):
+1. **Phase A** `npm run opportunity:shortlist` (auto) — Haiku AI-fit gate + Sonnet wedge → writes `config/erank-pulls/{date}.csv` worksheet + sidecar.
+2. **[manual]** fill the worksheet from eRank (avg searches, competition, top-10 review counts).
+3. **Phase C** `npm run opportunity:score -- --pulls=config/erank-pulls/{date}.csv` — real demand + real attackability + composite → `opportunity_scores` (with `data_source` provenance) + ranked report at `brain/opportunities/{date}.md`.
+
+Next, in order:
+- [ ] **Validate the four control cases** in the Phase C report's Validation section: `budget planner printable` + `habit tracker printable` MUST drop to LOW attackability once their real eRank top-10 fortresses are visible (smoke-tested with synthetic fortress data — confirm with real eRank numbers); `freelancer client onboarding template` + `virtual assistant business kit` get demand re-evaluated on real volume.
+- [ ] **Tune `MIN_AVG_SEARCHES` + attackability weights + tiers** against this run (all first-pass constants at the top of `src/lib/opportunity-scoring.ts`). Decide whether to fold the saturation ratio (`avg_searches/competition`) into demand (`SATURATION_ADJUST_WEIGHT`, currently 0).
 - [ ] **Auto-generate candidate keywords** (instead of the hand-seeded file) once tuning is trusted.
-- [ ] **Auto-feed surviving high-score opportunities into `decisions_needed`** for the Research Agent (close the loop: scanner → decision → brief → listing).
+- [ ] **Auto-feed eRank-verified survivors into `decisions_needed`** for the Research Agent (close the loop: scanner → decision → brief → listing).
+- Note: **Option 2 (programmatic Etsy SERP scraper)** for true organic ranking is parked as a deliberate later ToS decision — do NOT wire it into the shop's pipeline without explicit sign-off.
 
 ### Drive first sale (3 listings live, daily monitor capturing baseline)
 - [ ] Run `npm run monitor:listings` daily by hand for 3–5 days before scheduling cron — confirms baseline behavior, surfaces edge cases (state changes, sold_out, tag edits, etc.) per principle #7
