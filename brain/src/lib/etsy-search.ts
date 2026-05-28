@@ -134,13 +134,24 @@ function sanitizeForJsonb(s: string): string {
 // ---------------------------------------------------------------------------
 export async function searchEtsy(
   query: string,
-  options: { limit?: number } = {}
+  options: { limit?: number; sortOn?: 'created' | 'price' | 'updated' | 'score' } = {}
 ): Promise<EtsySearchResult[]> {
   const limit = Math.min(100, Math.max(1, options.limit ?? DEFAULT_LIMIT));
   const params = new URLSearchParams({
     keywords: query,
     limit: String(limit)
   });
+  // Etsy's listings/active defaults to sort_on=created (NEWEST-first), which
+  // surfaces brand-new zero-review listings rather than the niche's actual
+  // winners. Callers that want a relevance-ordered proxy pass sortOn:'score'.
+  // NB: Etsy explicitly states the API 'score' sort is NOT identical to the
+  // on-site relevancy ranking (and they won't sync them) — it is the closest
+  // public-API approximation, not the real organic order. Default is left
+  // unset so existing callers keep Etsy's default behavior unchanged.
+  if (options.sortOn) {
+    params.set('sort_on', options.sortOn);
+    params.set('sort_order', 'desc');
+  }
 
   const url = `${LISTINGS_ACTIVE_ENDPOINT}?${params.toString()}`;
 

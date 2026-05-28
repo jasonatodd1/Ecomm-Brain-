@@ -12,6 +12,7 @@
     "score": "tsx src/jobs/score-opportunities.ts",
     "score:whitespace": "tsx src/jobs/score-whitespace.ts",
     "bakeoff": "tsx src/jobs/run-niche-bakeoff.ts",
+    "opportunity:scan": "tsx src/jobs/scan-opportunities.ts",
     "seed:planneraddicts": "tsx src/jobs/seed-planneraddicts-decision.ts",
     "seed:meal-planner": "tsx src/jobs/seed-meal-planner-decision.ts",
     "seed:listings": "tsx src/jobs/seed-listings.ts",

@@ -1,0 +1,18 @@
+# Opportunity scanner seed keywords (one per line; # = comment).
+# MVP seed: chosen to visibly contrast fortress vs open niches.
+#
+# Controls we EXPECT to score LOW (craft/taste-moated or AI-compliance risk):
+lightroom presets
+svg bundle
+#
+# Cheap-printable controls (high demand, but fortress incumbents / commodity):
+budget planner printable
+habit tracker printable
+#
+# Candidates we EXPECT to score HIGHER (content/structure-heavy, specific personas):
+real estate agent transaction tracker
+freelancer client onboarding template
+photographer pricing guide template
+virtual assistant business kit
+wedding day timeline template
+adhd weekly planner notion

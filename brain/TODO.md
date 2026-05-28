@@ -5,6 +5,13 @@
 
 ## Current Focus
 
+### Opportunity scanner (MVP shipped 2026-05-28 — now tune, then automate)
+Market-wide attackability scoring engine: `npm run opportunity:scan` reads `config/opportunity-seed-keywords.txt`, scores three pillars (Demand / Attackability / AI-fit) per niche, persists to `opportunity_scores`, writes `brain/opportunities/{date}.md`. First seed run cost ~$0.03. Next, in order:
+- [ ] **Tune `REVIEW_TO_SALES_MULTIPLIER` + attackability weights + gate thresholds** against the known fortress/open results in `brain/opportunities/2026-05-28.md` (all first-pass constants live at the top of `src/lib/opportunity-scoring.ts`).
+- [ ] **Fix the demand signal — TOP priority (see scanner KEY LIMITATION).** The Etsy public API can't reproduce on-site organic order and doesn't surface a niche's true high-review incumbents (sort_on=score tested, strictly worse). So `median_reviews`/`demand_pool` are a biased proxy and the demand pillar under-counts mature niches. Real fix = the paid keyword-volume tool (see Backlog) feeding real demand instead of modeled review-sales. Until then, treat demand sub-scores as provisional.
+- [ ] **Auto-generate candidate keywords** (instead of the hand-seeded file) once tuning is trusted.
+- [ ] **Auto-feed surviving high-score opportunities into `decisions_needed`** for the Research Agent (close the loop: scanner → decision → brief → listing).
+
 ### Drive first sale (3 listings live, daily monitor capturing baseline)
 - [ ] Run `npm run monitor:listings` daily by hand for 3–5 days before scheduling cron — confirms baseline behavior, surfaces edge cases (state changes, sold_out, tag edits, etc.) per principle #7
 - [ ] First sale (validation milestone) — 3 listings active (meal planner + A5 calendar + bunny), awaiting market signal
