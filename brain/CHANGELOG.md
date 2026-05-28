@@ -3,6 +3,16 @@
 > Shipped work, newest-first. Moved here from `TODO.md` so the working doc stays scannable (open work only).
 > Discipline: every commit that completes a backlog item moves it here in the same commit.
 
+### Bake-off phrase-sensitivity fix + broadened seeds (shipped 2026-05-28)
+
+**Decoupled the two scoring legs' keyword granularity** and grew the seed set 20→28 (new `household_organization` beachhead lane). See `NICHE_BAKEOFF.md` + PRINCIPLES #14.
+
+- [x] **Head-term demand / specific-phrase supply.** Demand leg (Google Trends) now reads a broad HEAD term; supply leg (Etsy competition) still reads the specific buyer phrase. `white_space_score` formula unchanged — only the demand leg's input improved. `deriveHeadTerm()` deterministically strips digital-format modifiers (`printable/template/digital/pdf/editable/download/instant download`) with a per-keyword `head_term` override for physical "print"/SVG cases. Demand fetch deduped across head terms.
+- [x] **Canonical false-negative fixed.** `nursery wall art printable` ext_demand 0.000→0.102, WS 0.230→0.406, **DEAD_ZONE→WHITE_SPACE** (run `bakeoff-v3-phrasefix-2026-05-28T18-12-35` vs v2 baseline). Long-tail phrase had a true-zero Trends reading; head term `nursery wall art` registers interest 28.7.
+- [x] **Genuine dead zones NOT rescued (validation).** Head terms still ~0 stay ~0: `abstract wall art` 0.009, `budget planner` 0.000, `workout journal` 0.000, `dog portrait` 0.000, `custom pet portrait` 0.004 — report labels each `genuine low/dead`.
+- [x] **Broadened seeds** — `household_organization` (8): cleaning schedule, budget planner, paycheck budget tracker, chore chart, meal prep planner, family command center, cleaning checklist, savings tracker. Best WS: `meal prep planner printable` 0.525 (new #1 overall, demand 0.907 on velocity +153%).
+- [x] **Default run label** `bakeoff-v3-phrasefix-<ts>`; **default diff target** resolves the latest `bakeoff-baseline-v2-google-fixed-*` from the DB (`--diff-against=none` to skip). New report section 0 (DEMAND/SUPPLY SPLIT) makes the granularity auditable. Run cost: 28 SerpApi + 28 Etsy searches + ~280 listing fetches, 244s, no LLM.
+
 ### Meal planner — shipped end-to-end (2026-05-27 / 2026-05-28)
 
 **Live as Etsy listing `4512363257` @ $2.00, taxonomy 354, 7 photos, 4 PDFs attached.** Selected as product #3 (meal planner won the bake-off pick) and shipped from brief → asset → photos → listing → publish.

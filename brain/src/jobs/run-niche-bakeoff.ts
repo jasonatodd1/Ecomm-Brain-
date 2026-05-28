@@ -6,6 +6,7 @@ import { mapWithLimit } from '../lib/concurrency.js';
 import {
   BAKEOFF_NICHES,
   DIGITAL_PREFERENCE_HURDLE,
+  headTermFor,
   refineProducibilityFromResults,
   type ProducibilityTag
 } from '../lib/bakeoff-keywords.js';
@@ -19,6 +20,8 @@ import { searchEtsy } from '../lib/etsy-search.js';
 
 interface BakeoffRow {
   keyword: string;
+  /** Broad term the DEMAND leg measured (may equal keyword when no modifier stripped). */
+  head_term: string;
   niche: string;
   is_anchor_niche: boolean;
   producibility: ProducibilityTag;
@@ -49,7 +52,7 @@ function parseRunLabel(): string {
   const arg = process.argv.find(a => a.startsWith('--run-label='));
   if (arg) return arg.split('=')[1] ?? '';
   const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-  return `bakeoff-baseline-v2-google-fixed-${ts}`;
+  return `bakeoff-v3-phrasefix-${ts}`;
 }
 
 function parseTreatment(): string {
@@ -57,10 +60,26 @@ function parseTreatment(): string {
   return arg?.split('=')[1] ?? 'baseline';
 }
 
-function parseDiffAgainst(): string | null {
+/**
+ * Resolve the run to diff against. Explicit --diff-against wins; otherwise default to
+ * the most recent v2 baseline (specific-phrase demand) so the head-term fix is measured
+ * against the run it replaces. Returns null if none found / explicitly disabled.
+ */
+async function resolveDiffTarget(): Promise<string | null> {
   const arg = process.argv.find(a => a.startsWith('--diff-against='));
-  if (arg) return arg.split('=')[1] ?? null;
-  return 'bakeoff-baseline-no-pinterest-2026-05-26T23-39-41';
+  if (arg) {
+    const val = arg.split('=')[1] ?? '';
+    return val === 'none' ? null : val;
+  }
+  const { data, error } = await supabase
+    .from('niche_bakeoff_runs')
+    .select('run_label')
+    .like('run_label', 'bakeoff-baseline-v2-google-fixed-%')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error || !data) return null;
+  return data.run_label as string;
 }
 
 function nicheDisplayName(niche: string, isAnchor: boolean): string {
@@ -218,7 +237,7 @@ async function main(): Promise<void> {
   const startedAt = Date.now();
   const runLabel = parseRunLabel();
   const treatment = parseTreatment();
-  const diffAgainst = parseDiffAgainst();
+  const diffAgainst = await resolveDiffTarget();
   let etsySearchCalls = 0;
   let etsyListingCalls = 0;
   let etsy429s = 0;
@@ -233,21 +252,32 @@ async function main(): Promise<void> {
 
   console.log(`\n=== Niche bake-off: ${runLabel} ===`);
   console.log(`Treatment: ${treatment} | Pinterest demand slot: null (baseline)`);
-  console.log(`Google demand: fresh SerpApi Trends pull per keyword (today 1-m, US)\n`);
+  console.log(`Demand leg: Google Trends on HEAD term (today 1-m, US) — broad enough to register interest`);
+  console.log(`Supply leg: Etsy competition on SPECIFIC phrase — what a listing actually ranks against\n`);
 
-  const keywords = BAKEOFF_NICHES.map(s => s.keyword);
-  console.log(`Fetching Google Trends for ${keywords.length} keywords…`);
-  const googleByKeyword = await fetchGoogleTrendDemandBatch(keywords);
-  serpApiCalls = keywords.length;
+  // DEMAND leg reads HEAD terms (deduped to save SerpApi credits); SUPPLY leg reads specific phrases.
+  const headByKeyword = new Map<string, string>();
+  for (const spec of BAKEOFF_NICHES) headByKeyword.set(spec.keyword, headTermFor(spec));
+  const uniqueHeads = [...new Set([...headByKeyword.values()])];
 
-  for (const [kw, m] of googleByKeyword) {
-    if (m.has_data) {
+  console.log(
+    `Fetching Google Trends for ${uniqueHeads.length} unique head terms ` +
+      `(from ${BAKEOFF_NICHES.length} specific phrases)…`
+  );
+  const googleByHead = await fetchGoogleTrendDemandBatch(uniqueHeads);
+  serpApiCalls = uniqueHeads.length;
+
+  for (const head of uniqueHeads) {
+    const m = googleByHead.get(head);
+    if (m?.has_data) {
       console.log(
-        `  trends "${kw.slice(0, 36).padEnd(36)}" interest=${m.interest_score?.toFixed(1)} ` +
+        `  trends "${head.slice(0, 30).padEnd(30)}" interest=${m.interest_score?.toFixed(1)} ` +
           `velocity=${m.velocity_pct?.toFixed(1)}% demand=${m.google_demand.toFixed(3)}`
       );
     } else {
-      console.log(`  trends "${kw.slice(0, 36)}" no data${m.error ? ` (${m.error})` : ''} demand=0.000`);
+      console.log(
+        `  trends "${head.slice(0, 30).padEnd(30)}" no data${m?.error ? ` (${m.error})` : ''} demand=0.000 (genuine low/dead)`
+      );
     }
   }
 
@@ -262,9 +292,11 @@ async function main(): Promise<void> {
       keyword_count: BAKEOFF_NICHES.length,
       metadata: {
         digital_hurdle: DIGITAL_PREFERENCE_HURDLE,
-        sources: ['google_trends_fresh', 'etsy_incumbent_engagement'],
+        sources: ['google_trends_head_term', 'etsy_incumbent_engagement'],
         pinterest_slot: null,
         google_fetch: 'serpapi TIMESERIES today 1-m geo=US',
+        demand_supply_split: 'demand=head_term, supply=specific_phrase',
+        unique_head_terms: uniqueHeads.length,
         diff_against: diffAgainst
       }
     })
@@ -286,9 +318,10 @@ async function main(): Promise<void> {
   for (let i = 0; i < BAKEOFF_NICHES.length; i++) {
     const spec = BAKEOFF_NICHES[i];
     const results = searchResults[i] ?? [];
+    const head_term = headByKeyword.get(spec.keyword) ?? spec.keyword;
     const trend: GoogleTrendMeasurement =
-      googleByKeyword.get(spec.keyword) ?? {
-        keyword: spec.keyword,
+      googleByHead.get(head_term) ?? {
+        keyword: head_term,
         interest_score: null,
         velocity_pct: null,
         google_demand: 0,
@@ -314,6 +347,7 @@ async function main(): Promise<void> {
     const flags = [...gap.coherence.flags];
     const row: BakeoffRow = {
       keyword: spec.keyword,
+      head_term,
       niche: spec.niche,
       is_anchor_niche: spec.is_anchor_niche,
       producibility,
@@ -335,6 +369,8 @@ async function main(): Promise<void> {
 
     const gapAnalysis = {
       search_keyword: spec.keyword,
+      demand_head_term: head_term,
+      head_term_differs: head_term !== spec.keyword,
       scored_at: new Date().toISOString(),
       google_interest: trend.interest_score,
       google_velocity_pct: trend.velocity_pct,
@@ -396,6 +432,25 @@ async function main(): Promise<void> {
     },
     {} as Record<string, number>
   );
+
+  console.log('\n--- 0. DEMAND/SUPPLY SPLIT (head term drives demand; specific phrase drives supply) ---');
+  console.log('specific phrase (supply) | head term (demand) | head_interest | head_demand | note');
+  for (const r of scored) {
+    const differs = r.head_term !== r.keyword;
+    let note: string;
+    if (!differs) {
+      note = 'no modifier — head = specific';
+    } else if (r.google_demand >= 0.05) {
+      note = 'RESCUED (long-tail artifact → real head demand)';
+    } else {
+      note = 'genuine low/dead (head still ~0 — not rescued)';
+    }
+    console.log(
+      `${r.keyword.slice(0, 32).padEnd(32)} | ${r.head_term.slice(0, 24).padEnd(24)} | ` +
+        `${r.google_interest != null ? r.google_interest.toFixed(1).padStart(6) : '   n/a'} | ` +
+        `${r.google_demand.toFixed(3)} | ${note}`
+    );
+  }
 
   console.log('\n--- 1. RAW ranking (neutral white_space_score) ---');
   console.log(
@@ -464,7 +519,7 @@ async function main(): Promise<void> {
   console.log(
     `\n[summary] run=${runLabel} keywords=${scored.length} ` +
       `serpapi=${serpApiCalls} etsy_search=${etsySearchCalls} etsy_listing≈${etsyListingCalls} ` +
-      `429_fails≈${etsy429s} duration=${durationSec}s | BASELINE v2 — fresh Google Trends, no Pinterest`
+      `429_fails≈${etsy429s} duration=${durationSec}s | v3 phrase-fix — head-term demand / specific-phrase supply, no Pinterest`
   );
 
   await log({

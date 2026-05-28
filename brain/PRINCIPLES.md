@@ -38,6 +38,8 @@ Test the viability of an AI-operated commerce business. Target: $1k/month profit
 
 13. **Don't assert a category, capability, or constraint without verifying it.** A sharpening of #9, extended from APIs to claims about categories and risks. Don't declare "this taxonomy is art-prints-only," "this attribute is settable," or "this is an IP risk" from intuition — check the live taxonomy tree, a probe call, or a concrete example first. Unverified category/risk assertions propagate downstream (into briefs, listings, and decisions) just as expensively as unverified API assumptions.
 
+14. **Demand and supply signals want different keyword granularity.** A single keyword string is the wrong unit when two legs read it at different reliability. Measure *demand* at the granularity the demand source is reliable at, and *competition* at the granularity you actually compete at. Concretely in the bake-off: Google Trends needs a broad HEAD term (long-tail "...printable" phrasings read ~0 even for real markets — independent per-query normalization + thin/flat timelines), while Etsy competition must be scored on the SPECIFIC buyer phrase a listing ranks against. Decouple them; don't let the narrowest phrasing silently zero out a real market. Corollary: a fix that rescues *artifacts* must not rescue *genuine* dead zones — validate that the broadened signal is actually nonzero (a head term that's still ~0 is real low demand, not an artifact).
+
 ## System Map
 
 ### Agents

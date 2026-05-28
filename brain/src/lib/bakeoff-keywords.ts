@@ -6,12 +6,20 @@
 export type ProducibilityTag = 'digital' | 'physical-POD' | 'dropship';
 
 export interface BakeoffKeywordSpec {
+  /** SPECIFIC buyer phrase — what the SUPPLY leg (Etsy competition) scores against. */
   keyword: string;
   niche: string;
   /** Digital printables anchor niche for bake-off comparison. */
   is_anchor_niche: boolean;
   /** Default producibility; may be refined from Etsy title sample after search. */
   producibility: ProducibilityTag;
+  /**
+   * HEAD term — what the DEMAND leg (Google Trends) reads. Optional override;
+   * when omitted, derived deterministically by `deriveHeadTerm(keyword)`.
+   * Set explicitly only when the deterministic strip is insufficient (e.g.
+   * physical "print" / SVG phrasings where the format word is also the product noun).
+   */
+  head_term?: string;
 }
 
 export const BAKEOFF_NICHES: BakeoffKeywordSpec[] = [
@@ -39,13 +47,16 @@ export const BAKEOFF_NICHES: BakeoffKeywordSpec[] = [
     keyword: 'abstract wall art print',
     niche: 'physical_wall_art',
     is_anchor_niche: false,
-    producibility: 'physical-POD'
+    producibility: 'physical-POD',
+    // "print" is the medium word here, not a strip-able digital format → override.
+    head_term: 'abstract wall art'
   },
   {
     keyword: 'botanical wall art print set',
     niche: 'physical_wall_art',
     is_anchor_niche: false,
-    producibility: 'physical-POD'
+    producibility: 'physical-POD',
+    head_term: 'botanical wall art'
   },
   // Pet portraits / pet art
   {
@@ -58,7 +69,8 @@ export const BAKEOFF_NICHES: BakeoffKeywordSpec[] = [
     keyword: 'dog portrait print',
     niche: 'pet_portraits',
     is_anchor_niche: false,
-    producibility: 'physical-POD'
+    producibility: 'physical-POD',
+    head_term: 'dog portrait'
   },
   // Wedding & events
   {
@@ -90,7 +102,9 @@ export const BAKEOFF_NICHES: BakeoffKeywordSpec[] = [
     keyword: 'svg bundle cricut',
     niche: 'svg_craft_digital',
     is_anchor_niche: false,
-    producibility: 'digital'
+    producibility: 'digital',
+    // "svg/bundle/cricut" are all format/platform words → strip yields nothing usable; broad head.
+    head_term: 'cricut svg'
   },
   // Greeting cards / stationery
   {
@@ -143,11 +157,118 @@ export const BAKEOFF_NICHES: BakeoffKeywordSpec[] = [
     niche: 'home_decor_physical',
     is_anchor_niche: false,
     producibility: 'dropship'
+  },
+  // Household organization — our beachhead lane (meal planner gives us a foothold here).
+  // All digital printables; head terms derived by stripping the "printable" format word.
+  {
+    keyword: 'cleaning schedule printable',
+    niche: 'household_organization',
+    is_anchor_niche: false,
+    producibility: 'digital'
+  },
+  {
+    keyword: 'budget planner printable',
+    niche: 'household_organization',
+    is_anchor_niche: false,
+    producibility: 'digital'
+  },
+  {
+    keyword: 'paycheck budget tracker printable',
+    niche: 'household_organization',
+    is_anchor_niche: false,
+    producibility: 'digital',
+    // strip alone keeps "paycheck budget tracker" (thin Trends) → use the broad head.
+    head_term: 'budget tracker'
+  },
+  {
+    keyword: 'chore chart printable',
+    niche: 'household_organization',
+    is_anchor_niche: false,
+    producibility: 'digital'
+  },
+  {
+    keyword: 'meal prep planner printable',
+    niche: 'household_organization',
+    is_anchor_niche: false,
+    producibility: 'digital'
+  },
+  {
+    keyword: 'family command center printable',
+    niche: 'household_organization',
+    is_anchor_niche: false,
+    producibility: 'digital'
+  },
+  {
+    keyword: 'cleaning checklist printable',
+    niche: 'household_organization',
+    is_anchor_niche: false,
+    producibility: 'digital'
+  },
+  {
+    keyword: 'savings tracker printable',
+    niche: 'household_organization',
+    is_anchor_niche: false,
+    producibility: 'digital'
   }
 ];
 
 /** Digital-preference hurdle: physical/dropship must beat best digital WS by this margin. */
 export const DIGITAL_PREFERENCE_HURDLE = 0.1;
+
+/**
+ * Format/delivery modifier words stripped to derive a HEAD term for the demand leg.
+ * These denote how the product is delivered, not what it is — so removing them
+ * yields the broad product noun phrase that Google Trends can actually measure.
+ * (Long-tail "...printable" phrasings return ~0 Trends interest even for real markets;
+ * the canonical false-negative is "nursery wall art printable" → DEAD_ZONE.)
+ *
+ * Deliberately CONSERVATIVE: only unambiguous digital-format words. Physical "print",
+ * "set", platform words like "cricut/svg" are left to per-keyword `head_term` overrides
+ * (control where the strip would mangle the noun; scalable default everywhere else).
+ */
+const FORMAT_MODIFIER_PHRASES = ['instant download', 'digital download'];
+const FORMAT_MODIFIER_TOKENS = new Set([
+  'printable',
+  'printables',
+  'template',
+  'templates',
+  'digital',
+  'pdf',
+  'editable',
+  'download',
+  'downloads',
+  'downloadable',
+  'instant'
+]);
+
+/**
+ * Deterministically derive a broad HEAD term from a specific buyer phrase by
+ * stripping format/delivery modifier words. Falls back to the original phrase if
+ * stripping leaves nothing usable (so a phrase that is ALL modifiers — e.g. pure
+ * "svg bundle" — keeps its words rather than collapsing to empty; use an override
+ * for those). Lower-cased, whitespace-collapsed.
+ */
+export function deriveHeadTerm(keyword: string): string {
+  let s = ` ${keyword.toLowerCase()} `;
+  for (const phrase of FORMAT_MODIFIER_PHRASES) {
+    s = s.replace(new RegExp(`\\s${phrase}\\s`, 'g'), ' ');
+  }
+  const tokens = s
+    .split(/\s+/)
+    .map(t => t.trim())
+    .filter(Boolean)
+    .filter(t => !FORMAT_MODIFIER_TOKENS.has(t));
+  const head = tokens.join(' ');
+  if (tokens.length === 0 || head.length < 3) {
+    return keyword.toLowerCase().trim();
+  }
+  return head;
+}
+
+/** Resolve the demand-leg head term for a spec: explicit override wins, else derive. */
+export function headTermFor(spec: BakeoffKeywordSpec): string {
+  return (spec.head_term ?? deriveHeadTerm(spec.keyword)).trim();
+}
 
 const DIGITAL_TITLE_HINTS =
   /digital download|instant download|printable|pdf|svg|canva|template/i;
