@@ -22,7 +22,7 @@ import type {
   ProductBrief
 } from './types.js';
 
-const OPUS_MODEL = 'claude-opus-4-7';
+const OPUS_MODEL = 'claude-opus-4-8';
 const KEYWORD_COST_USD = 0.05;
 // Tuning Pass 2 enlarges synthesis output substantially: structured
 // listing.description, attribute_intent, image_spec, competitive_landscape.
@@ -123,8 +123,34 @@ export async function researchDecision(
     const subreddit =
       typeof ctx['subreddit'] === 'string' ? ctx['subreddit'] : '';
     const source = typeof ctx['source'] === 'string' ? ctx['source'] : '';
-    const nicheTag =
-      source === 'reddit' && subreddit ? subreddit : 'general';
+
+    // Collapse a human-readable string into a valid niche_tag:
+    // lowercase, strip non-alphanumeric/space/underscore, trim, spaces→underscores.
+    const slugifyNicheTag = (s: string): string =>
+      s
+        .toLowerCase()
+        .replace(/[^a-z0-9\s_]/g, '')
+        .trim()
+        .replace(/\s+/g, '_');
+
+    // Resolver priority:
+    // 1. Reddit-sourced — use subreddit (preserves existing behaviour).
+    // 2. Scanner/trends-sourced — take the first non-empty of: context.niche_tag,
+    //    context.seed_key, context.primary_keyword, context.opportunity_name.
+    //    seed_key and niche_tag are already slugified; primary_keyword/opportunity_name
+    //    are human-readable and go through slugifyNicheTag.
+    // 3. Fall back to 'general'.
+    let nicheTag: string;
+    if (source === 'reddit' && subreddit) {
+      nicheTag = subreddit;
+    } else {
+      const nicheCandidate =
+        (typeof ctx['niche_tag'] === 'string' ? ctx['niche_tag'] : '') ||
+        (typeof ctx['seed_key'] === 'string' ? ctx['seed_key'] : '') ||
+        (typeof ctx['primary_keyword'] === 'string' ? ctx['primary_keyword'] : '') ||
+        (typeof ctx['opportunity_name'] === 'string' ? ctx['opportunity_name'] : '');
+      nicheTag = nicheCandidate ? slugifyNicheTag(nicheCandidate) : 'general';
+    }
 
     const { data: nicheData, error: nicheErr } = await supabase
       .from('niche_memory')
@@ -257,6 +283,14 @@ export async function researchDecision(
       }
     );
 
+    // Strip lone UTF-16 surrogates from the prompt before sending to the API.
+    // Surrogate code units can appear in LLM outputs (e.g. Haiku buyer_pain_signals)
+    // and in scraped Etsy listing copy; JSON.stringify then encodes them as \uD800
+    // etc. which Anthropic's API rejects as invalid JSON (400 "no low surrogate").
+    // sanitizeJsonbDeep handles strings recursively — cast back to string since
+    // the prompt is a plain string, not a tree.
+    const sanitizedSynthesisPrompt = sanitizeJsonbDeep(synthesisPrompt) as string;
+
     let briefRaw: unknown;
     let synthesisAttempts = 0;
     const maxSynthesisAttempts = 2;
@@ -267,7 +301,7 @@ export async function researchDecision(
         // v3 adds differentiation_thesis + load-bearing alignment — budget headroom
         // at 16384; retry once on JSON parse failure (truncation or stray quotes).
         max_tokens: 16384,
-        messages: [{ role: 'user', content: synthesisPrompt }]
+        messages: [{ role: 'user', content: sanitizedSynthesisPrompt }]
       });
       totalCostUsd += SYNTHESIS_COST_USD;
 

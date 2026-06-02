@@ -16,6 +16,7 @@ Next, in order:
 - [ ] **Tune `MIN_AVG_SEARCHES` + attackability weights + tiers** against this run (all first-pass constants at the top of `src/lib/opportunity-scoring.ts`). Decide whether to fold the saturation ratio (`avg_searches/competition`) into demand (`SATURATION_ADJUST_WEIGHT`, currently 0).
 - [ ] **Auto-generate candidate keywords** (instead of the hand-seeded file) once tuning is trusted.
 - [ ] **Auto-feed eRank-verified survivors into `decisions_needed`** for the Research Agent (close the loop: scanner → decision → brief → listing).
+- ✅ **niche_tag resolver fixed** — scanner-sourced decisions now resolve to a slugified keyword tag instead of `general`, so seeded `niche_memory` rows are loaded at synthesis. `wedding_day_timeline_template` decision will now load its 5 `operator_intel` rows on the next research run. Resolver priority: (1) `context.subreddit` if Reddit-sourced, (2) first non-empty of `context.niche_tag` / `context.seed_key` / `context.primary_keyword` / `context.opportunity_name` — slugified, (3) `general`. See `src/agents/research/index.ts` Step 3.
 - Note: **Option 2 (programmatic Etsy SERP scraper)** for true organic ranking is parked as a deliberate later ToS decision — do NOT wire it into the shop's pipeline without explicit sign-off.
 
 ### Drive first sale (3 listings live, daily monitor capturing baseline)
