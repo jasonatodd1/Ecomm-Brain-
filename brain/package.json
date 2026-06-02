@@ -26,6 +26,7 @@
     "resynth:meal-planner-v5": "tsx src/jobs/resynthesize-meal-planner-v5.ts",
     "research:nurserywallart": "tsx src/jobs/research-decision.ts --decision-id=2af0ba72-2fe0-452e-b5d8-d888ee4cdeea",
     "research:wedding-timeline": "tsx src/jobs/research-decision.ts --decision-id=60dbd2ae-094e-404f-8bfc-0c7bdc1024eb",
+    "visual:analyze": "tsx src/jobs/visual-analyst.ts",
     "render:planner": "tsx src/render/planner.ts",
     "build:meal-planner": "tsx src/render/meal-planner.ts",
     "render:meal-planner-photos": "tsx src/render/meal-planner-photos.ts",
