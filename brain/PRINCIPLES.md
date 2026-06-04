@@ -40,6 +40,8 @@ Test the viability of an AI-operated commerce business. Target: $1k/month profit
 
 14. **Demand and supply signals want different keyword granularity.** A single keyword string is the wrong unit when two legs read it at different reliability. Measure *demand* at the granularity the demand source is reliable at, and *competition* at the granularity you actually compete at. Concretely in the bake-off: Google Trends needs a broad HEAD term (long-tail "...printable" phrasings read ~0 even for real markets — independent per-query normalization + thin/flat timelines), while Etsy competition must be scored on the SPECIFIC buyer phrase a listing ranks against. Decouple them; don't let the narrowest phrasing silently zero out a real market. Corollary: a fix that rescues *artifacts* must not rescue *genuine* dead zones — validate that the broadened signal is actually nonzero (a head term that's still ~0 is real low demand, not an artifact).
 
+15. **Product-in-space listing photos use edit-image, not text-to-image.** When a real product design must appear inside a scene (tablet, laptop, held sheet), route through image-to-image edit with the actual product PNG as input — never text-to-image, which hallucinates documents and text; legibility-critical detail shots stay Puppeteer crops. See AI_HANDOFF.md → *PATTERN — Product-in-space listing photos*.
+
 ## System Map
 
 ### Agents

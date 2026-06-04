@@ -185,6 +185,25 @@ Root: `brain/`. All paths below are relative to that.
 **Programmatic listing photo conventions (structured-document products):** Three renders from the same HTML/CSS template via `meal-planner-photos.ts`: (1) full-page screenshot at 300dpi (`deviceScaleFactor: 3.125` → 2550×3300 Letter) for the product-flat shot; (2) DOM-bounds crop via `sharp.extract()` on the grocery section for structural differentiation; (3) 2×2 SKU composite built from base64-embedded thumbnails in a standalone HTML grid. Combined with fal UI lifestyle composites (01–04) for the full 7-photo Etsy set.
 - **`render-graphic.ts`** — `npm run render:graphic <input.html> <output.{png,jpg}>`. Generic screenshot tool for listing assets. Output format is inferred from the file extension: `.jpg`/`.jpeg` → JPEG quality 92, anything else → PNG. Used for the bunny "What's Included" graphic at 2000×2000.
 
+**PATTERN — Product-in-space listing photos** (validated 2026-06-04 on wedding timeline photographer-on-site shot)
+
+**Rule:** When a real product design must appear inside a scene (on a tablet, laptop, phone, or printed sheet held or staged in a setting), use **image-to-image EDIT** (instruct editing, FLUX Kontext-style endpoint with the product image as input) — **never text-to-image generation**.
+
+**Why:** Text-to-image forces the model to invent the product and its text, which always hallucinates — garbled documents, fake keyboards, gibberish table rows. Image-to-image edit takes the real product PNG as input and builds the scene around it, so the product's text comes from the file and stays real. This was the exact root cause of the failed first pass (`generate-image.ts` → `flux-2-pro` text-to-image produced a garbled dangling document and a fake laptop keyboard) and the fix that worked (edit-image with the actual page PNG produced a clean, premium photographer-on-site shot with the real cue sheet legible on the tablet).
+
+**How:**
+- **Input** is the real product PNG — the actual exported page or design, not a description of it.
+- **Operation** is the edit/instruct endpoint (image + instruction in, edited image out), not the text-to-image endpoint.
+- **Instruction** explicitly names the surface the product sits on (tablet, laptop, printed sheet) and describes the scene around it — setting, lighting, lens and depth of field, mood, palette, props — and explicitly instructs the model to keep the product's text sharp, undistorted, legible, and matched to the surface's perspective.
+
+**Division of labor:**
+- **Lifestyle / context shots (product-in-space)** → edit-image. Slightly soft fine/body text is acceptable here — the product's title and structure read clearly and the shot's job is "product in use," not "read every line."
+- **Legibility-critical detail shots** → clean Puppeteer crops of the raw page. Never route the shots where buyers actually read content through a generated or edited image.
+
+**Pipeline implication (future task — do not implement yet):** `src/tools/generate-image.ts` should gain an `edit-image` path that accepts an input image and routes product-in-space shots through the edit/instruct endpoint instead of text-to-image. The visual analyst's `recommended_photo_set` should tag each shot as `product-in-space` (edit-image), `detail` (Puppeteer crop), or `pure scene` (text-to-image) so the pipeline picks the right method automatically.
+
+**Validated example:** Wedding timeline photographer-on-site shot — input `Photographer Cue Sheet.png`, instruction placed it on a tablet held by a photographer at a golden-hour venue; output was premium and legible where it mattered (title and structure intact), with fine row text acceptably soft for a context shot. Output: `assets/wedding-timeline/listing-photos/04-photographer-onsite.png`.
+
 ### `src/lib/`
 - **`supabase.ts`** — `service_role` Supabase client. Loads `.env.local` at import time; throws on missing creds. `auth.persistSession: false`. Server-side only.
 - **`etsy-search.ts`** — Etsy Open API v3 wrapper. Four public functions: `searchEtsy`, `getShop`, `getListing`, **`getListingReviews`** (research-v3 — x-api-key only, no OAuth). Helpers: `sanitizeForJsonb`, `sanitizeJsonbDeep`, `priceToCents`.
